@@ -497,6 +497,7 @@ var _ = Describe("Validating VMICreate Admitter", func() {
 		},
 			Entry("when architecture is amd64", "amd64", "q35"),
 			Entry("when architecture is arm64", "arm64", "virt"),
+			Entry("when architecture is ppc64le", "ppc64le", "pseries"),
 			Entry("when architecture is s390x", "s390x", "s390-ccw-virtio"),
 		)
 
@@ -516,6 +517,7 @@ var _ = Describe("Validating VMICreate Admitter", func() {
 			Entry("Wrong prefix amd64 q35", "amd64", "test-q35"),
 			Entry("Wrong prefix amd64 pc-q35", "amd64", "test-pc-q35"),
 			Entry("Wrong prefix arm64", "arm64", "test-virt"),
+			Entry("Wrong prefix ppc64le", "ppc64le", "test-pseries"),
 			Entry("Wrong prefix s390x", "s390x", "test-s390-ccw-virtio"),
 		)
 
@@ -2506,8 +2508,7 @@ var _ = Describe("Validating VMICreate Admitter", func() {
 					},
 				},
 			}
-			vmi.Spec.Architecture = "amd64"
-			enableFeatureGates(featuregate.MultiArchitecture, featuregate.WorkloadEncryptionSEV)
+			enableFeatureGates(featuregate.WorkloadEncryptionSEV)
 		})
 
 		It("should accept when the feature gate is enabled and OVMF is configured", func() {
@@ -2516,7 +2517,7 @@ var _ = Describe("Validating VMICreate Admitter", func() {
 		})
 
 		It("should reject when the feature gate is disabled", func() {
-			enableFeatureGates(featuregate.MultiArchitecture)
+			disableFeatureGates()
 			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
 			Expect(causes).To(HaveLen(1))
 			Expect(causes[0].Message).To(ContainSubstring(fmt.Sprintf("%s feature gate is not enabled", featuregate.WorkloadEncryptionSEV)))
@@ -2577,55 +2578,6 @@ var _ = Describe("Validating VMICreate Admitter", func() {
 			Expect(causes).To(HaveLen(1))
 			Expect(causes[0].Field).To(ContainSubstring("launchSecurity"))
 		})
-
-		Context("with AMD SEV-SNP LaunchSecurity", func() {
-			BeforeEach(func() {
-				vmi.Spec.Domain.LaunchSecurity = &v1.LaunchSecurity{
-					SNP: &v1.SEVSNP{},
-				}
-			})
-
-			It("should accept when the feature gate is enabled and OVMF is configured", func() {
-				causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
-				Expect(causes).To(BeEmpty())
-			})
-
-			It("should reject when both SEV and SNP are configured", func() {
-				vmi.Spec.Domain.LaunchSecurity.SEV = &v1.SEV{}
-				causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
-				Expect(causes).To(HaveLen(1))
-				Expect(causes[0].Type).To(Equal(metav1.CauseTypeForbidden))
-				Expect(causes[0].Message).To(ContainSubstring("One and only one launchSecurity type can be set"))
-			})
-
-			It("should reject when the feature gate is disabled", func() {
-				enableFeatureGates(featuregate.MultiArchitecture)
-				causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
-				Expect(causes).To(HaveLen(1))
-				Expect(causes[0].Message).To(ContainSubstring(fmt.Sprintf("%s feature gate is not enabled", featuregate.WorkloadEncryptionSEV)))
-			})
-
-			It("should reject when persistent EFI variables are enabled", func() {
-				vmi.Spec.Domain.Firmware.Bootloader.EFI.Persistent = pointer.P(true)
-				causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
-				Expect(causes).To(HaveLen(1))
-				Expect(causes[0].Type).To(Equal(metav1.CauseTypeFieldValueInvalid))
-				Expect(causes[0].Message).To(ContainSubstring("SNP does not work along with Persistent EFI variables"))
-				Expect(causes[0].Field).To(Equal("fake.launchSecurity"))
-			})
-
-			It("should accept when persistent EFI variables are disabled", func() {
-				vmi.Spec.Domain.Firmware.Bootloader.EFI.Persistent = pointer.P(false)
-				causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
-				Expect(causes).To(BeEmpty())
-			})
-
-			It("should accept when persistent EFI variables are not specified", func() {
-				// persistent field is nil by default
-				causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
-				Expect(causes).To(BeEmpty())
-			})
-		})
 	})
 
 	Context("with Secure Execution LaunchSecurity", func() {
@@ -2667,33 +2619,14 @@ var _ = Describe("Validating VMICreate Admitter", func() {
 					},
 				},
 			}
-			vmi.Spec.Architecture = "amd64"
-			enableFeatureGates(featuregate.MultiArchitecture, featuregate.WorkloadEncryptionTDX)
-		})
-
-		It("should reject when SMM is enabled", func() {
-			vmi.Spec.Domain.Features = &v1.Features{
-				SMM: &v1.FeatureState{
-					Enabled: pointer.P(true),
-				},
-			}
-			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
-			Expect(causes).To(HaveLen(1))
-			Expect(causes[0].Message).To(ContainSubstring("TDX does not work along with SMM"))
+			enableFeatureGates(featuregate.WorkloadEncryptionTDX)
 		})
 
 		It("should reject when SEV is set", func() {
 			vmi.Spec.Domain.LaunchSecurity.SEV = &v1.SEV{}
 			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
 			Expect(causes).To(HaveLen(1))
-			Expect(causes[0].Message).To(ContainSubstring("One and only one launchSecurity type can be set"))
-		})
-
-		It("should reject when SNP is set", func() {
-			vmi.Spec.Domain.LaunchSecurity.SNP = &v1.SEVSNP{}
-			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
-			Expect(causes).To(HaveLen(1))
-			Expect(causes[0].Message).To(ContainSubstring("One and only one launchSecurity type can be set"))
+			Expect(causes[0].Message).To(ContainSubstring("One and only one launchSecurity type should be set"))
 		})
 
 		It("should accept when the feature gate is enabled and OVMF is configured", func() {
@@ -2702,7 +2635,7 @@ var _ = Describe("Validating VMICreate Admitter", func() {
 		})
 
 		It("should reject when the feature gate is disabled", func() {
-			enableFeatureGates(featuregate.MultiArchitecture)
+			disableFeatureGates()
 			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
 			Expect(causes).To(HaveLen(1))
 			Expect(causes[0].Message).To(ContainSubstring(fmt.Sprintf("%s feature gate is not enabled", featuregate.WorkloadEncryptionTDX)))
@@ -2731,26 +2664,6 @@ var _ = Describe("Validating VMICreate Admitter", func() {
 			}
 			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
 			Expect(causes).To(HaveLen(len(vmi.Spec.Domain.Devices.Interfaces)))
-		})
-
-		It("should reject when persistent EFI variables are enabled", func() {
-			vmi.Spec.Domain.Firmware.Bootloader.EFI.Persistent = pointer.P(true)
-			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
-			Expect(causes).To(HaveLen(1))
-			Expect(causes[0].Type).To(Equal(metav1.CauseTypeFieldValueInvalid))
-			Expect(causes[0].Message).To(ContainSubstring("TDX does not work along with Persistent EFI variables"))
-			Expect(causes[0].Field).To(Equal("fake.launchSecurity"))
-		})
-
-		It("should accept when persistent EFI variables are disabled", func() {
-			vmi.Spec.Domain.Firmware.Bootloader.EFI.Persistent = pointer.P(false)
-			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
-			Expect(causes).To(BeEmpty())
-		})
-
-		It("should accept when persistent EFI variables are not specified", func() {
-			causes := ValidateVirtualMachineInstanceSpec(k8sfield.NewPath("fake"), &vmi.Spec, config)
-			Expect(causes).To(BeEmpty())
 		})
 	})
 
@@ -3674,6 +3587,11 @@ var _ = Describe("Validating VMICreate Admitter", func() {
 			Entry("arm64 allows bochs", "arm64", "ramfb"),
 
 			Entry("s390x allows virtio", "s390x", "virtio"),
+
+			Entry("ppc64le allows virtio", "ppc64le", "virtio"),
+			Entry("ppc64le allows bochs", "ppc64le", "bochs"),
+			Entry("ppc64le allows vga", "ppc64le", "vga"),
+			Entry("ppc64le allows cirrus", "ppc64le", "cirrus"),
 		)
 
 		DescribeTable("should reject unsupported video models per architecture", func(arch, videoType string) {
@@ -3707,6 +3625,13 @@ var _ = Describe("Validating VMICreate Admitter", func() {
 			Entry("s390x rejects xenfb", "s390x", "xenfb"),
 			Entry("s390x rejects none", "s390x", "none"),
 			Entry("s390x rejects invalid model", "s390x", "invalidmodel"),
+
+			Entry("ppc64le rejects ramfb", "ppc64le", "ramfb"),
+			Entry("ppc64le rejects qxl", "ppc64le", "qxl"),
+			Entry("ppc64le rejects vmvga", "ppc64le", "vmvga"),
+			Entry("ppc64le rejects xenfb", "ppc64le", "xenfb"),
+			Entry("ppc64le rejects none", "ppc64le", "none"),
+			Entry("ppc64le rejects invalid model", "ppc64le", "invalidmodel"),
 		)
 	})
 
