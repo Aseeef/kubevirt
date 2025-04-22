@@ -160,6 +160,10 @@ func (converterAMD64) LaunchSecurity(vmi *v1.VirtualMachineInstance) *api.Launch
 		return &api.LaunchSecurity{
 			Type: "tdx",
 		}
+	} else if util.IsTDXVMI(vmi) {
+		return &api.LaunchSecurity{
+			Type: "tdx",
+		}
 	}
 
 	return nil

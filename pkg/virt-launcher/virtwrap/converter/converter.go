@@ -54,7 +54,6 @@ import (
 	"kubevirt.io/kubevirt/pkg/ignition"
 	"kubevirt.io/kubevirt/pkg/os/disk"
 	"kubevirt.io/kubevirt/pkg/pointer"
-	"kubevirt.io/kubevirt/pkg/safepath"
 	"kubevirt.io/kubevirt/pkg/storage/reservation"
 	storagetypes "kubevirt.io/kubevirt/pkg/storage/types"
 	"kubevirt.io/kubevirt/pkg/tpm"
@@ -94,7 +93,6 @@ type ConverterContext struct {
 	CPUSet                          []int
 	IsBlockPVC                      map[string]bool
 	IsBlockDV                       map[string]bool
-	ApplyCBT                        map[string]string
 	HotplugVolumes                  map[string]v1.VolumeStatus
 	PermanentVolumes                map[string]v1.VolumeStatus
 	MigratedVolumes                 map[string]string
@@ -110,9 +108,9 @@ type ConverterContext struct {
 	VolumesDiscardIgnore            []string
 	Topology                        *cmdv1.Topology
 	ExpandDisksEnabled              bool
-	UseLaunchSecuritySEV            bool // For AMD SEV/ES/SNP
-	UseLaunchSecurityTDX            bool // For Intel TDX
-	UseLaunchSecurityPV             bool // For IBM SE(s390-pv)
+	UseLaunchSecuritySEV            bool
+	UseLaunchSecurityTDX            bool
+	UseLaunchSecurityPV             bool
 	FreePageReporting               bool
 	BochsForEFIGuests               bool
 	SerialConsoleLog                bool
@@ -299,12 +297,6 @@ func Convert_v1_BlockSize_To_api_BlockIO(source *v1.Disk, disk *api.Disk) error 
 			LogicalBlockSize:  blockSize.Logical,
 			PhysicalBlockSize: blockSize.Physical,
 		}
-		// TODO: as of the time of writing this, KubeVirt uses libvirt < v11.6.0
-		// which means that a discard_granularity value of 0 is omitted.
-		// remove this comment once upgraded.
-		if blockSize.DiscardGranularity != nil {
-			disk.BlockIO.DiscardGranularity = pointer.P(*blockSize.DiscardGranularity)
-		}
 	} else if matchFeature := source.BlockSize.MatchVolume; matchFeature != nil && (matchFeature.Enabled == nil || *matchFeature.Enabled) {
 		blockIO, err := getOptimalBlockIO(disk)
 		if err != nil {
@@ -324,49 +316,31 @@ func getOptimalBlockIO(disk *api.Disk) (*api.BlockIO, error) {
 	return nil, fmt.Errorf("disk is neither a block device nor a file")
 }
 
+// getOptimalBlockIOForDevice determines the optimal sizes based on the physical device properties.
 func getOptimalBlockIOForDevice(path string) (*api.BlockIO, error) {
-	safePath, err := safepath.JoinAndResolveWithRelativeRoot("/", path)
+	f, err := os.OpenFile(path, syscall.O_RDONLY, 0)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to open device %v: %v", path, err)
 	}
-	fd, err := safepath.OpenAtNoFollow(safePath)
-	if err != nil {
-		return nil, fmt.Errorf("could not open file %s. Reason: %w", safePath, err)
-	}
-	defer util.CloseIOAndCheckErr(fd, nil)
-
-	f, err := os.OpenFile(fd.SafePath(), os.O_RDONLY, 0)
-	if err != nil {
-		return nil, err
-	}
-	defer util.CloseIOAndCheckErr(f, &err)
+	defer util.CloseIOAndCheckErr(f, nil)
 
 	logicalSize, err := unix.IoctlGetUint32(int(f.Fd()), unix.BLKSSZGET)
 	if err != nil {
-		return nil, fmt.Errorf("unable to get logical block size from device %s: %w", path, err)
+		return nil, fmt.Errorf("unable to get logical block size from device %v: %v", path, err)
 	}
-	physicalSize, err := unix.IoctlGetUint32(int(f.Fd()), unix.BLKPBSZGET)
+	physicalSize, err := unix.IoctlGetUint32(int(f.Fd()), unix.BLKBSZGET)
 	if err != nil {
-		return nil, fmt.Errorf("unable to get physical block size from device %s: %w", path, err)
+		return nil, fmt.Errorf("unable to get physical block size from device %v: %v", path, err)
 	}
 
-	log.Log.Infof("Detected logical size of %d and physical size of %d for device %s", logicalSize, physicalSize, path)
+	log.Log.Infof("Detected logical size of %d and physical size of %d for device %v", logicalSize, physicalSize, path)
 
 	if logicalSize == 0 && physicalSize == 0 {
 		return nil, fmt.Errorf("block sizes returned by device %v are 0", path)
 	}
-
-	discardGranularity, err := getDiscardGranularity(safePath)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Log.Infof("Detected discard granularity of %d for device %v", discardGranularity, path)
-
 	blockIO := &api.BlockIO{
-		LogicalBlockSize:   uint(logicalSize),
-		PhysicalBlockSize:  uint(physicalSize),
-		DiscardGranularity: pointer.P(uint(discardGranularity)),
+		LogicalBlockSize:  uint(logicalSize),
+		PhysicalBlockSize: uint(physicalSize),
 	}
 	if logicalSize == 0 || physicalSize == 0 {
 		if logicalSize > physicalSize {
@@ -377,52 +351,21 @@ func getOptimalBlockIOForDevice(path string) (*api.BlockIO, error) {
 			blockIO.LogicalBlockSize = uint(physicalSize)
 		}
 	}
-	if *blockIO.DiscardGranularity%blockIO.LogicalBlockSize != 0 {
-		log.Log.Infof("Invalid discard granularity %d. Matching it to physical size %d", *blockIO.DiscardGranularity, blockIO.PhysicalBlockSize)
-		blockIO.DiscardGranularity = pointer.P(uint(physicalSize))
-	}
 	return blockIO, nil
-}
-
-func getDiscardGranularity(safePath *safepath.Path) (uint64, error) {
-	fileInfo, err := safepath.StatAtNoFollow(safePath)
-	if err != nil {
-		return 0, fmt.Errorf("could not stat file %s. Reason: %w", safePath.String(), err)
-	}
-	stat := fileInfo.Sys().(*syscall.Stat_t)
-	rdev := uint64(stat.Rdev) //nolint:unconvert // Rdev is uint32 on e.g. MIPS.
-	major := unix.Major(rdev)
-	minor := unix.Minor(rdev)
-
-	raw, err := os.ReadFile(fmt.Sprintf("/sys/dev/block/%d:%d/queue/discard_granularity", major, minor))
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			// On the off chance that we can't stat the discard granularity, set it to disabled.
-			return 0, nil
-		}
-		return 0, fmt.Errorf("cannot read discard granularity for device %s: %w", safePath.String(), err)
-	}
-	discardGranularity, err := strconv.ParseUint(strings.TrimSpace(string(raw)), 10, 0)
-	if err != nil {
-		return 0, err
-	}
-
-	return discardGranularity, err
 }
 
 // getOptimalBlockIOForFile determines the optimal sizes based on the filesystem settings
 // the VM's disk image is residing on. A filesystem does not differentiate between sizes.
 // The physical size will always match the logical size. The rest is up to the filesystem.
 func getOptimalBlockIOForFile(path string) (*api.BlockIO, error) {
-	var statfs unix.Statfs_t
-	if err := unix.Statfs(path, &statfs); err != nil {
+	var statfs syscall.Statfs_t
+	err := syscall.Statfs(path, &statfs)
+	if err != nil {
 		return nil, fmt.Errorf("failed to stat file %v: %v", path, err)
 	}
-	blockSize := uint(statfs.Bsize)
 	return &api.BlockIO{
-		LogicalBlockSize:   blockSize,
-		PhysicalBlockSize:  blockSize,
-		DiscardGranularity: &blockSize,
+		LogicalBlockSize:  uint(statfs.Bsize),
+		PhysicalBlockSize: uint(statfs.Bsize),
 	}, nil
 }
 
@@ -623,7 +566,7 @@ func Convert_v1_Volume_To_api_Disk(source *v1.Volume, disk *api.Disk, c *Convert
 	}
 
 	if source.HostDisk != nil {
-		return Convert_v1_HostDisk_To_api_Disk(source.Name, source.HostDisk.Path, disk, c)
+		return Convert_v1_HostDisk_To_api_Disk(source.Name, source.HostDisk.Path, disk)
 	}
 
 	if source.PersistentVolumeClaim != nil {
@@ -687,7 +630,8 @@ func Convert_v1_Missing_Volume_To_api_Disk(disk *api.Disk) error {
 
 func Convert_v1_Config_To_api_Disk(volumeName string, disk *api.Disk, configType config.Type) error {
 	disk.Type = "file"
-	setDiskDriver(disk, "raw", false)
+	disk.Driver.Type = "raw"
+	disk.Driver.ErrorPolicy = v1.DiskErrorPolicyStop
 	switch configType {
 	case config.ConfigMap:
 		disk.Source.File = config.GetConfigMapDiskPath(volumeName)
@@ -722,64 +666,11 @@ func GetHotplugBlockDeviceVolumePath(volumeName string) string {
 	return filepath.Join(string(filepath.Separator), "var", "run", "kubevirt", "hotplug-disks", volumeName)
 }
 
-func setDiskDriver(disk *api.Disk, driverType string, discard bool) {
-	disk.Driver.Type = driverType
-	disk.Driver.ErrorPolicy = v1.DiskErrorPolicyStop
-	if discard {
-		disk.Driver.Discard = "unmap"
-	}
-}
-
-func convertVolumeWithCBT(volumeName, cbtPath string, isBlock bool, disk *api.Disk, volumesDiscardIgnore []string) error {
-	setDiskDriver(disk, "qcow2", !slices.Contains(volumesDiscardIgnore, volumeName))
-
-	disk.Type = "file"
-	disk.Source.File = cbtPath
-	disk.Source.DataStore = &api.DataStore{
-		Format: &api.DataStoreFormat{
-			Type: "raw",
-		},
-	}
-
-	if isBlock {
-		disk.Source.Name = volumeName
-		disk.Source.DataStore.Type = "block"
-		disk.Source.DataStore.Source = &api.DiskSource{
-			Dev: GetBlockDeviceVolumePath(volumeName),
-		}
-	} else {
-		disk.Source.DataStore.Type = "file"
-		disk.Source.DataStore.Source = &api.DiskSource{
-			File: GetFilesystemVolumePath(volumeName),
-		}
-	}
-
-	return nil
-}
-
-func convertVolumeWithoutCBT(volumeName string, isBlock bool, disk *api.Disk, volumesDiscardIgnore []string) error {
-	setDiskDriver(disk, "raw", !slices.Contains(volumesDiscardIgnore, volumeName))
-
-	if isBlock {
-		disk.Type = "block"
-		disk.Source.Name = volumeName
-		disk.Source.Dev = GetBlockDeviceVolumePath(volumeName)
-	} else {
-		disk.Type = "file"
-		disk.Source.File = GetFilesystemVolumePath(volumeName)
-	}
-	return nil
-}
-
-func ConvertVolumeSourceToDisk(volumeName, cbtPath string, isBlock bool, disk *api.Disk, volumesDiscardIgnore []string) error {
-	if cbtPath != "" {
-		return convertVolumeWithCBT(volumeName, cbtPath, isBlock, disk, volumesDiscardIgnore)
-	}
-	return convertVolumeWithoutCBT(volumeName, isBlock, disk, volumesDiscardIgnore)
-}
-
 func Convert_v1_PersistentVolumeClaim_To_api_Disk(name string, disk *api.Disk, c *ConverterContext) error {
-	return ConvertVolumeSourceToDisk(name, c.ApplyCBT[name], c.IsBlockPVC[name], disk, c.VolumesDiscardIgnore)
+	if c.IsBlockPVC[name] {
+		return Convert_v1_BlockVolumeSource_To_api_Disk(name, disk, c.VolumesDiscardIgnore)
+	}
+	return Convert_v1_FilesystemVolumeSource_To_api_Disk(name, disk, c.VolumesDiscardIgnore)
 }
 
 // Convert_v1_Hotplug_PersistentVolumeClaim_To_api_Disk converts a Hotplugged PVC to an api disk
@@ -791,7 +682,10 @@ func Convert_v1_Hotplug_PersistentVolumeClaim_To_api_Disk(name string, disk *api
 }
 
 func Convert_v1_DataVolume_To_api_Disk(name string, disk *api.Disk, c *ConverterContext) error {
-	return ConvertVolumeSourceToDisk(name, c.ApplyCBT[name], c.IsBlockDV[name], disk, c.VolumesDiscardIgnore)
+	if c.IsBlockDV[name] {
+		return Convert_v1_BlockVolumeSource_To_api_Disk(name, disk, c.VolumesDiscardIgnore)
+	}
+	return Convert_v1_FilesystemVolumeSource_To_api_Disk(name, disk, c.VolumesDiscardIgnore)
 }
 
 // Convert_v1_Hotplug_DataVolume_To_api_Disk converts a Hotplugged DataVolume to an api disk
@@ -805,7 +699,8 @@ func Convert_v1_Hotplug_DataVolume_To_api_Disk(name string, disk *api.Disk, c *C
 // Convert_v1_FilesystemVolumeSource_To_api_Disk takes a FS source and builds the domain Disk representation
 func Convert_v1_FilesystemVolumeSource_To_api_Disk(volumeName string, disk *api.Disk, volumesDiscardIgnore []string) error {
 	disk.Type = "file"
-	setDiskDriver(disk, "raw", false)
+	disk.Driver.Type = "raw"
+	disk.Driver.ErrorPolicy = v1.DiskErrorPolicyStop
 	disk.Source.File = GetFilesystemVolumePath(volumeName)
 	if !slices.Contains(volumesDiscardIgnore, volumeName) {
 		disk.Driver.Discard = "unmap"
@@ -816,14 +711,22 @@ func Convert_v1_FilesystemVolumeSource_To_api_Disk(volumeName string, disk *api.
 // Convert_v1_Hotplug_FilesystemVolumeSource_To_api_Disk takes a FS source and builds the KVM Disk representation
 func Convert_v1_Hotplug_FilesystemVolumeSource_To_api_Disk(volumeName string, disk *api.Disk, volumesDiscardIgnore []string) error {
 	disk.Type = "file"
-	setDiskDriver(disk, "raw", !slices.Contains(volumesDiscardIgnore, volumeName))
+	disk.Driver.Type = "raw"
+	disk.Driver.ErrorPolicy = v1.DiskErrorPolicyStop
+	if !slices.Contains(volumesDiscardIgnore, volumeName) {
+		disk.Driver.Discard = "unmap"
+	}
 	disk.Source.File = GetHotplugFilesystemVolumePath(volumeName)
 	return nil
 }
 
 func Convert_v1_BlockVolumeSource_To_api_Disk(volumeName string, disk *api.Disk, volumesDiscardIgnore []string) error {
 	disk.Type = "block"
-	setDiskDriver(disk, "raw", !slices.Contains(volumesDiscardIgnore, volumeName))
+	disk.Driver.Type = "raw"
+	disk.Driver.ErrorPolicy = v1.DiskErrorPolicyStop
+	if !slices.Contains(volumesDiscardIgnore, volumeName) {
+		disk.Driver.Discard = "unmap"
+	}
 	disk.Source.Name = volumeName
 	disk.Source.Dev = GetBlockDeviceVolumePath(volumeName)
 	return nil
@@ -832,30 +735,20 @@ func Convert_v1_BlockVolumeSource_To_api_Disk(volumeName string, disk *api.Disk,
 // Convert_v1_Hotplug_BlockVolumeSource_To_api_Disk takes a block device source and builds the domain Disk representation
 func Convert_v1_Hotplug_BlockVolumeSource_To_api_Disk(volumeName string, disk *api.Disk, volumesDiscardIgnore []string) error {
 	disk.Type = "block"
-	setDiskDriver(disk, "raw", !slices.Contains(volumesDiscardIgnore, volumeName))
+	disk.Driver.Type = "raw"
+	disk.Driver.ErrorPolicy = v1.DiskErrorPolicyStop
+	if !slices.Contains(volumesDiscardIgnore, volumeName) {
+		disk.Driver.Discard = "unmap"
+	}
 	disk.Source.Dev = GetHotplugBlockDeviceVolumePath(volumeName)
 	return nil
 }
 
-func Convert_v1_HostDisk_To_api_Disk(volumeName string, path string, disk *api.Disk, c *ConverterContext) error {
+func Convert_v1_HostDisk_To_api_Disk(volumeName string, path string, disk *api.Disk) error {
 	disk.Type = "file"
-	if cbtPath, ok := c.ApplyCBT[volumeName]; ok {
-		disk.Driver.Type = "qcow2"
-		disk.Source.File = cbtPath
-		disk.Source.DataStore = &api.DataStore{
-			Type: "file",
-			Format: &api.DataStoreFormat{
-				Type: "raw",
-			},
-			Source: &api.DiskSource{
-				File: hostdisk.GetMountedHostDiskPath(volumeName, path),
-			},
-		}
-	} else {
-		disk.Driver.Type = "raw"
-		disk.Source.File = hostdisk.GetMountedHostDiskPath(volumeName, path)
-	}
+	disk.Driver.Type = "raw"
 	disk.Driver.ErrorPolicy = v1.DiskErrorPolicyStop
+	disk.Source.File = hostdisk.GetMountedHostDiskPath(volumeName, path)
 	return nil
 }
 
@@ -886,7 +779,8 @@ func Convert_v1_CloudInitSource_To_api_Disk(source v1.VolumeSource, disk *api.Di
 
 	disk.Source.File = cloudinit.GetIsoFilePath(dataSource, c.VirtualMachine.Name, c.VirtualMachine.Namespace)
 	disk.Type = "file"
-	setDiskDriver(disk, "raw", false)
+	disk.Driver.Type = "raw"
+	disk.Driver.ErrorPolicy = v1.DiskErrorPolicyStop
 	return nil
 }
 
@@ -911,8 +805,10 @@ func Convert_v1_EmptyDiskSource_To_api_Disk(volumeName string, _ *v1.EmptyDiskSo
 	}
 
 	disk.Type = "file"
+	disk.Driver.Type = "qcow2"
+	disk.Driver.Discard = "unmap"
 	disk.Source.File = emptydisk.NewEmptyDiskCreator().FilePathForVolumeName(volumeName)
-	setDiskDriver(disk, "qcow2", true)
+	disk.Driver.ErrorPolicy = v1.DiskErrorPolicyStop
 
 	return nil
 }
@@ -922,7 +818,9 @@ func Convert_v1_ContainerDiskSource_To_api_Disk(volumeName string, _ *v1.Contain
 		return fmt.Errorf(deviceTypeNotCompatibleFmt, disk.Alias.GetName())
 	}
 	disk.Type = "file"
-	setDiskDriver(disk, "qcow2", true)
+	disk.Driver.Type = "qcow2"
+	disk.Driver.ErrorPolicy = v1.DiskErrorPolicyStop
+	disk.Driver.Discard = "unmap"
 	disk.Source.File = c.EphemeraldiskCreator.GetFilePath(volumeName)
 	disk.BackingStore = &api.BackingStore{
 		Format: &api.BackingStoreFormat{},
@@ -943,7 +841,9 @@ func Convert_v1_ContainerDiskSource_To_api_Disk(volumeName string, _ *v1.Contain
 
 func Convert_v1_EphemeralVolumeSource_To_api_Disk(volumeName string, disk *api.Disk, c *ConverterContext) error {
 	disk.Type = "file"
-	setDiskDriver(disk, "qcow2", true)
+	disk.Driver.Type = "qcow2"
+	disk.Driver.ErrorPolicy = v1.DiskErrorPolicyStop
+	disk.Driver.Discard = "unmap"
 	disk.Source.File = c.EphemeraldiskCreator.GetFilePath(volumeName)
 	disk.BackingStore = &api.BackingStore{
 		Format: &api.BackingStoreFormat{},
@@ -1296,18 +1196,23 @@ func Convert_v1_Firmware_To_related_apis(vmi *v1.VirtualMachineInstance, domain 
 	}
 
 	if vmi.IsBootloaderEFI() {
-		domain.Spec.OS.BootLoader = &api.Loader{
-			Path:     c.EFIConfiguration.EFICode,
-			ReadOnly: "yes",
-			Secure:   boolToYesNo(&c.EFIConfiguration.SecureLoader, false),
-		}
-
-		if util.IsSEVSNPVMI(vmi) || util.IsTDXVMI(vmi) {
-			// Use stateless firmware for the TDX/SNP VMs
-			domain.Spec.OS.BootLoader.Type = "rom"
+		if c.UseLaunchSecurityTDX {
+			// Use stateless firmware for the TDX VMs
+			domain.Spec.OS.BootLoader = &api.Loader{
+				Path:     c.EFIConfiguration.EFICode,
+				ReadOnly: "yes",
+				Secure:   boolToYesNo(&c.EFIConfiguration.SecureLoader, false),
+				Type:     "rom",
+			}
 			domain.Spec.OS.NVRam = nil
 		} else {
-			domain.Spec.OS.BootLoader.Type = "pflash"
+			domain.Spec.OS.BootLoader = &api.Loader{
+				Path:     c.EFIConfiguration.EFICode,
+				ReadOnly: "yes",
+				Secure:   boolToYesNo(&c.EFIConfiguration.SecureLoader, false),
+				Type:     "pflash",
+			}
+
 			domain.Spec.OS.NVRam = &api.NVRam{
 				Template: c.EFIConfiguration.EFIVars,
 				NVRam:    filepath.Join(services.PathForNVram(vmi), vmi.Name+"_VARS.fd"),
@@ -1336,13 +1241,13 @@ func Convert_v1_Firmware_To_related_apis(vmi *v1.VirtualMachineInstance, domain 
 		log.Log.Object(vmi).Infof("kernel boot defined for VMI. Converting to domain XML")
 		if kb.Container.KernelPath != "" {
 			kernelPath := containerdisk.GetKernelBootArtifactPathFromLauncherView(kb.Container.KernelPath)
-			log.Log.Object(vmi).Infof("setting kernel path for kernel boot: %s", kernelPath)
+			log.Log.Object(vmi).Infof("setting kernel path for kernel boot: " + kernelPath)
 			domain.Spec.OS.Kernel = kernelPath
 		}
 
 		if kb.Container.InitrdPath != "" {
 			initrdPath := containerdisk.GetKernelBootArtifactPathFromLauncherView(kb.Container.InitrdPath)
-			log.Log.Object(vmi).Infof("setting initrd path for kernel boot: %s", initrdPath)
+			log.Log.Object(vmi).Infof("setting initrd path for kernel boot: " + initrdPath)
 			domain.Spec.OS.Initrd = initrdPath
 		}
 
@@ -1350,7 +1255,7 @@ func Convert_v1_Firmware_To_related_apis(vmi *v1.VirtualMachineInstance, domain 
 
 	// Define custom command-line arguments even if kernel-boot container is not defined
 	if firmware.KernelBoot != nil {
-		log.Log.Object(vmi).Infof("setting custom kernel arguments: %s", firmware.KernelBoot.KernelArgs)
+		log.Log.Object(vmi).Infof("setting custom kernel arguments: " + firmware.KernelBoot.KernelArgs)
 		domain.Spec.OS.KernelArgs = firmware.KernelBoot.KernelArgs
 	}
 
@@ -1610,10 +1515,7 @@ func Convert_v1_VirtualMachineInstance_To_api_Domain(vmi *v1.VirtualMachineInsta
 			IOMMU: "on",
 		}
 	}
-
-	if util.UseLaunchSecurity(vmi) {
-		domain.Spec.LaunchSecurity = c.Architecture.LaunchSecurity(vmi)
-	}
+	domain.Spec.LaunchSecurity = c.Architecture.LaunchSecurity(vmi)
 
 	if c.SMBios != nil {
 		domain.Spec.SysInfo.System = append(domain.Spec.SysInfo.System,
@@ -2200,15 +2102,11 @@ func newDeviceNamer(volumeStatuses []v1.VolumeStatus, disks []v1.Disk) map[strin
 	return prefixMap
 }
 
-func GetVolumeNameByDisk(disk api.Disk) string {
-	return disk.Alias.GetName()
-}
-
 // GetVolumeNameByTarget returns the volume name associated to the device target in the domain (e.g vda)
 func GetVolumeNameByTarget(domain *api.Domain, target string) string {
 	for _, d := range domain.Spec.Devices.Disks {
 		if d.Target.Device == target {
-			return GetVolumeNameByDisk(d)
+			return d.Alias.GetName()
 		}
 	}
 	return ""
