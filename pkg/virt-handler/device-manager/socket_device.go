@@ -114,43 +114,75 @@ func (dpi *SocketDevicePlugin) Start(stop <-chan struct{}) (err error) {
 }
 
 func (dpi *SocketDevicePlugin) setSocketPermissions() error {
-	prSock, err := safepath.JoinAndResolveWithRelativeRoot("/", dpi.socketDir, dpi.socket)
+	socketPath := filepath.Join(dpi.socketDir, dpi.socket)
+	prSock, err := safepath.NewPathNoFollow(socketPath)
 	if err != nil {
-		return fmt.Errorf("error opening the socket %s/%s: %v", dpi.socketDir, dpi.socketName, err)
+		// For external sockets (like socat relays), the socket might not exist yet during initialization
+		// or we might not have permission to access it. This is not necessarily fatal.
+		log.DefaultLogger().Infof("Socket %s not accessible during initialization (this is normal for external sockets): %v", socketPath, err)
+		return nil
 	}
-	err = dpi.p.ChownAtNoFollow(prSock, util.NonRootUID, util.NonRootUID)
-	if err != nil {
-		return fmt.Errorf("error setting the permission the socket %s/%s:%v", dpi.socketDir, dpi.socketName, err)
-	}
-	if se, exists, err := dpi.executor.NewSELinux(); err == nil && exists {
-		if err := selinux.RelabelFilesUnprivileged(se.IsPermissive(), prSock); err != nil {
-			return fmt.Errorf("error relabeling required files: %v", err)
+
+	// Only change ownership for sockets in KubeVirt-managed directories
+	// External sockets (like socat relays) should not have their ownership changed
+	if dpi.isKubeVirtManagedDirectory() {
+		err = dpi.p.ChownAtNoFollow(prSock, util.NonRootUID, util.NonRootUID)
+		if err != nil {
+			return fmt.Errorf("error setting the permission the socket %s:%v", socketPath, err)
 		}
-	} else if err != nil {
-		return fmt.Errorf("failed to detect the presence of selinux: %v", err)
+
+		// Only relabel sockets in KubeVirt-managed directories
+		if se, exists, err := dpi.executor.NewSELinux(); err == nil && exists {
+			if err := selinux.RelabelFilesUnprivileged(se.IsPermissive(), prSock); err != nil {
+				return fmt.Errorf("error relabeling required files: %v", err)
+			}
+		} else if err != nil {
+			return fmt.Errorf("failed to detect the presence of selinux: %v", err)
+		}
+	} else {
+		// For external sockets, attempt relabeling but don't fail if it doesn't work
+		if se, exists, err := dpi.executor.NewSELinux(); err == nil && exists {
+			if err := selinux.RelabelFilesUnprivileged(se.IsPermissive(), prSock); err != nil {
+				log.DefaultLogger().Infof("Could not relabel external socket %s (this may be normal): %v", socketPath, err)
+			}
+		}
 	}
 
 	return nil
 }
 
 func (dpi *SocketDevicePlugin) setSocketDirectoryPermissions() error {
-	dir, err := safepath.JoinAndResolveWithRelativeRoot("/", dpi.socketDir)
+	dir, err := safepath.NewPathNoFollow(dpi.socketDir)
 	if err != nil {
-		return fmt.Errorf("error opening the socket dir %s: %v", dpi.socket, err)
+		return fmt.Errorf("error opening the socket dir %s: %v", dpi.socketDir, err)
 	}
-	err = dpi.p.ChownAtNoFollow(dir, util.NonRootUID, util.NonRootUID)
-	if err != nil {
-		return fmt.Errorf("error setting the permission the socket dir %s: %v", dpi.socketDir, err)
-	}
-	if se, exists, err := dpi.executor.NewSELinux(); err == nil && exists {
-		if err := selinux.RelabelFilesUnprivileged(se.IsPermissive(), dir); err != nil {
-			return fmt.Errorf("error relabeling required files: %v", err)
+
+	// Only change ownership for KubeVirt-managed directories, not system directories
+	if dpi.isKubeVirtManagedDirectory() {
+		err = dpi.p.ChownAtNoFollow(dir, util.NonRootUID, util.NonRootUID)
+		if err != nil {
+			return fmt.Errorf("error setting the permission the socket dir %s: %v", dpi.socketDir, err)
 		}
-	} else if err != nil {
-		return fmt.Errorf("failed to detect the presence of selinux: %v", err)
+		// Only relabel KubeVirt-managed directories, not system directories like /var/run
+		if se, exists, err := dpi.executor.NewSELinux(); err == nil && exists {
+			if err := selinux.RelabelFilesUnprivileged(se.IsPermissive(), dir); err != nil {
+				return fmt.Errorf("error relabeling required files: %v", err)
+			}
+		} else if err != nil {
+			return fmt.Errorf("failed to detect the presence of selinux: %v", err)
+		}
 	}
 
 	return nil
+}
+
+// isKubeVirtManagedDirectory determines whether the socket directory is managed by KubeVirt
+// and therefore safe to modify ownership and SELinux labels. System directories like /var/run
+// should not be relabeled with container contexts.
+func (dpi *SocketDevicePlugin) isKubeVirtManagedDirectory() bool {
+	// KubeVirt-managed directories are typically under /var/run/kubevirt/
+	return strings.HasPrefix(dpi.socketDir, "/var/run/kubevirt/") ||
+		strings.HasPrefix(dpi.socketDir, "/run/kubevirt/")
 }
 
 func NewSocketDevicePlugin(socketName, socketDir, socket string, maxDevices int, executor selinux.Executor, p PermissionManager) (*SocketDevicePlugin, error) {

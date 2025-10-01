@@ -129,7 +129,7 @@ func NewHandlerDaemonSet(namespace, repository, imagePrefix, version, launcherVe
 	pod.ServiceAccountName = HandlerServiceAccountName
 	pod.HostPID = true
 
-	// nodelabeller currently only support x86. The arch check will be done in node-labller.sh
+	// nodelabeller currently only support x86. The arch check will be done in node-labeller.sh
 	pod.InitContainers = []corev1.Container{
 		{
 			Command: []string{

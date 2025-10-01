@@ -200,6 +200,15 @@ func (c *DeviceController) updatePermittedHostDevicePlugins() []Device {
 		}
 	}
 
+	if c.virtConfig.WorkloadEncryptionTDXEnabled() {
+		d, err := NewSocketDevicePlugin("qgs", "/var/run", "tdx-qgs.sock", c.maxDevices, selinux.SELinuxExecutor{}, NewPermissionManager())
+		if err != nil {
+			log.Log.Reason(err).Errorf("failed to configure the desired mdev types for qgs, failed to get node details")
+		} else {
+			permittedDevices = append(permittedDevices, d)
+		}
+	}
+
 	hostDevs := c.virtConfig.GetPermittedHostDevices()
 	if hostDevs == nil {
 		return permittedDevices

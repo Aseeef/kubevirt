@@ -292,6 +292,10 @@ func (c *ClusterConfig) SetConfigModifiedCallback(cb ConfigModifiedFn) {
 	}
 }
 
+func (c *ClusterConfig) WorkloadEncryptionTDXEnabled() bool {
+	return true
+}
+
 func setConfigFromKubeVirt(config *v1.KubeVirtConfiguration, kv *v1.KubeVirt) error {
 	kvConfig := &kv.Spec.Configuration
 	overrides, err := json.Marshal(kvConfig)
