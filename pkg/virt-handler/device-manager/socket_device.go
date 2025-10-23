@@ -30,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/fsnotify/fsnotify"
 	"google.golang.org/grpc"
@@ -46,6 +47,7 @@ import (
 
 type PermissionManager interface {
 	ChownAtNoFollow(path *safepath.Path, uid, gid int) error
+	IsAccessibleByUser(path *safepath.Path, uid int) (bool, error)
 }
 
 type permissionManager struct{}
@@ -56,6 +58,36 @@ func NewPermissionManager() PermissionManager {
 
 func (p *permissionManager) ChownAtNoFollow(path *safepath.Path, uid, gid int) error {
 	return safepath.ChownAtNoFollow(path, uid, gid)
+}
+
+func (p *permissionManager) IsAccessibleByUser(path *safepath.Path, uid int) (bool, error) {
+	// Get file info using safepath
+	fileInfo, err := safepath.StatAtNoFollow(path)
+	if err != nil {
+		return false, err
+	}
+
+	stat, ok := fileInfo.Sys().(*syscall.Stat_t)
+	if !ok {
+		return false, fmt.Errorf("failed to get stat information")
+	}
+
+	mode := fileInfo.Mode()
+
+	// Check if user is the owner
+	if stat.Uid == uint32(uid) {
+		// Owner: check user permissions (rwx)
+		return mode&0400 != 0, nil
+	}
+
+	// Check if user is in the file's group
+	if stat.Gid == uint32(uid) {
+		// Group: check group permissions (rwx)
+		return mode&0040 != 0, nil
+	}
+
+	// Otherwise check others permissions
+	return mode&0004 != 0, nil
 }
 
 type SocketDevicePlugin struct {

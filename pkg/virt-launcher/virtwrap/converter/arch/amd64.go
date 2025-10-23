@@ -147,7 +147,9 @@ func (converterAMD64) LaunchSecurity(vmi *v1.VirtualMachineInstance) *api.Launch
 		}
 	} else if util.IsTDXVMI(vmi) {
 		return &api.LaunchSecurity{
-			Type: "tdx",
+			Type:                   "tdx",
+			Policy:                 "0x10000000",
+			QuoteGenerationService: &api.QGS{SocketAddress: &api.UnixSocketAddress{Type: "unix", Path: "/var/run/tdx-qgs/qgs.socket"}},
 		}
 	}
 

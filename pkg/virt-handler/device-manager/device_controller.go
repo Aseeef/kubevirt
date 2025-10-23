@@ -182,6 +182,12 @@ func (c *DeviceController) updatePermittedHostDevicePlugins() []Device {
 		{"sev", "/dev/sev", c.virtConfig.WorkloadEncryptionSEVEnabled},
 		{"vhost-vsock", "/dev/vhost-vsock", c.virtConfig.VSOCKEnabled},
 	}
+
+	// Add QGS device plugin for TDX workloads
+	if c.virtConfig.WorkloadEncryptionTDXEnabled() {
+		qgsPlugin := NewQGSDevicePlugin(c.maxDevices)
+		permittedDevices = append(permittedDevices, qgsPlugin)
+	}
 	for _, dev := range featureGatedDevices {
 		if dev.IsAllowed() {
 			permittedDevices = append(
