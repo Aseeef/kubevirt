@@ -138,10 +138,6 @@ func DetectEFIEnvironment(arch, ovmfPath string) *EFIEnvironment {
 	codeWithSEV := getEFIBinaryIfExists(ovmfPath, EFICodeSEV)
 	varsWithSEV := getEFIBinaryIfExists(ovmfPath, EFIVarsSEV)
 
-	// detect EFI with TDX
-	codeWithTDX := getEFIBinaryIfExists(ovmfPath, EFICodeTDX)
-	codeWithTDXSB := getEFIBinaryIfExists(ovmfPath, EFICodeTDXSecureBoot)
-
 	return &EFIEnvironment{
 		codeSecureBoot:    codeWithSB,
 		varsSecureBoot:    varsWithSB,
