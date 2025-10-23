@@ -723,7 +723,6 @@ type DiskSource struct {
 	Host          *DiskSourceHost `xml:"host,omitempty"`
 	Reservations  *Reservations   `xml:"reservations,omitempty"`
 	Slices        []Slice         `xml:"slices,omitempty"`
-	DataStore     *DataStore      `xml:"dataStore,omitempty"`
 }
 
 type DiskTarget struct {
@@ -758,16 +757,6 @@ type DiskSourceHost struct {
 	Port string `xml:"port,attr,omitempty"`
 }
 
-type DataStore struct {
-	Type   string           `xml:"type,attr,omitempty"`
-	Format *DataStoreFormat `xml:"format,omitempty"`
-	Source *DiskSource      `xml:"source,omitempty"`
-}
-
-type DataStoreFormat struct {
-	Type string `xml:"type,attr"`
-}
-
 type BackingStore struct {
 	Type   string              `xml:"type,attr,omitempty"`
 	Format *BackingStoreFormat `xml:"format,omitempty"`
@@ -779,9 +768,8 @@ type BackingStoreFormat struct {
 }
 
 type BlockIO struct {
-	LogicalBlockSize   uint  `xml:"logical_block_size,attr,omitempty"`
-	PhysicalBlockSize  uint  `xml:"physical_block_size,attr,omitempty"`
-	DiscardGranularity *uint `xml:"discard_granularity,attr,omitempty"`
+	LogicalBlockSize  uint `xml:"logical_block_size,attr,omitempty"`
+	PhysicalBlockSize uint `xml:"physical_block_size,attr,omitempty"`
 }
 
 type Reservations struct {
@@ -1079,12 +1067,17 @@ type Entry struct {
 //BEGIN LaunchSecurity --------------------
 
 type LaunchSecurity struct {
-	Type            string `xml:"type,attr"`
-	DHCert          string `xml:"dhCert,omitempty"`
-	Session         string `xml:"session,omitempty"`
-	Cbitpos         string `xml:"cbitpos,omitempty"`
-	ReducedPhysBits string `xml:"reducedPhysBits,omitempty"`
-	Policy          string `xml:"policy,omitempty"`
+	Type                   string `xml:"type,attr"`
+	Cbitpos                string `xml:"cbitpos,omitempty"`
+	ReducedPhysBits        string `xml:"reducedPhysBits,omitempty"`
+	Policy                 string `xml:"policy,omitempty"`
+	DHCert                 string `xml:"dhCert,omitempty"`
+	Session                string `xml:"session,omitempty"`
+	QuoteGenerationService *QGS   `xml:"quoteGenerationService,omitempty"`
+}
+
+type QGS struct {
+	Path string `xml:"path,attr,omitempty"`
 }
 
 //END LaunchSecurity --------------------

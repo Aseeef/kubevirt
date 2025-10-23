@@ -1,0 +1,91 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  annotations:
+    description: TDX VM example
+    kubemacpool.io/transaction-timestamp: "2024-12-23T02:48:52.37066582Z"
+    kubevirt.io/latest-observed-api-version: v1
+    kubevirt.io/storage-observed-api-version: v1
+  creationTimestamp: "2024-12-23T02:48:47Z"
+  finalizers:
+    - kubevirt.io/virtualMachineControllerFinalize
+  generation: 2
+  labels:
+    app: tdx1
+    os.template.kubevirt.io/fedora: "true"
+  name: tdx1
+  namespace: default
+  resourceVersion: "238061645"
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      annotations:
+        vm.kubevirt.io/flavor: small
+        vm.kubevirt.io/os: fedora
+        vm.kubevirt.io/workload: server
+      creationTimestamp: null
+      labels:
+        kubevirt.io/domain: tdx1
+        kubevirt.io/size: small
+        network.kubevirt.io/headlessService: headless
+    spec:
+      architecture: amd64
+      domain:
+        cpu:
+          model: host-passthrough
+          cores: 2
+          sockets: 1
+          threads: 1
+        devices:
+          disks:
+            - disk:
+                bus: virtio
+              name: rootdisk1
+            - disk:
+                bus: virtio
+              name: cloudinitdisk
+          interfaces:
+            - masquerade: {}
+              model: virtio
+              name: default
+          networkInterfaceMultiqueue: false
+          autoattachGraphicsDevice: false
+          autoattachSerialConsole: true
+          disableHotplug: true
+          autoattachPodInterface: false
+          rng: {}
+        features:
+          apic: {}
+          acpi: {}
+          smm:
+            enabled: false
+        firmware:
+          bootloader:
+            efi:
+              secureBoot: false
+        launchSecurity:
+          tdx: {}
+        machine:
+          type: q35
+        memory:
+          guest: 2Gi
+        resources:
+          limits:
+            devices.kubevirt.io/qgs: 1
+      hostname: example-u6viov1xt17wv2b7
+      networks:
+        - name: default
+          pod: {}
+      terminationGracePeriodSeconds: 180
+      volumes:
+        - containerDisk:
+            image: quay.io/containerdisks/fedora
+          name: rootdisk1
+        - cloudInitNoCloud:
+            userData: |-
+              #cloud-config
+              user: fedora
+              password: 'redhat'
+              chpasswd: { expire: False }
+          name: cloudinitdisk
