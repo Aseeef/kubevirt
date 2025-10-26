@@ -159,10 +159,6 @@ func (converterAMD64) LaunchSecurity(vmi *v1.VirtualMachineInstance) *api.Launch
 	} else if launchSec.TDX != nil {
 		return &api.LaunchSecurity{
 			Type: "tdx",
-		}
-	} else if util.IsTDXVMI(vmi) {
-		return &api.LaunchSecurity{
-			Type:                   "tdx",
 			QuoteGenerationService: &api.QGS{Path: "/var/run/tdx-qgs/qgs.socket"},
 		}
 	}
