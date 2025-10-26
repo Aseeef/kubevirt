@@ -1073,24 +1073,12 @@ type LaunchSecurity struct {
 	Policy                 string `xml:"policy,omitempty"`
 	DHCert                 string `xml:"dhCert,omitempty"`
 	Session                string `xml:"session,omitempty"`
-	MrConfigId             string `xml:"mrConfigId,omitempty"`
-	MrOwner                string `xml:"mrOwner,omitempty"`
-	MrOwnerConfig          string `xml:"mrOwnerConfig,omitempty"`
 	QuoteGenerationService *QGS   `xml:"quoteGenerationService,omitempty"`
 }
 
 type QGS struct {
-	SocketAddress *UnixSocketAddress `xml:"SocketAddress,omitempty"`
-}
-
-type UnixSocketAddress struct {
-	Type string `xml:"type,attr"`
 	Path string `xml:"path,attr,omitempty"`
-	CID  int    `xml:"cid,attr,omitempty"`
-	Port int    `xml:"port,attr,omitempty"`
 }
-
-
 
 //END LaunchSecurity --------------------
 //BEGIN Clock --------------------
