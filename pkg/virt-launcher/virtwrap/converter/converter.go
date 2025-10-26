@@ -1614,7 +1614,6 @@ func Convert_v1_VirtualMachineInstance_To_api_Domain(vmi *v1.VirtualMachineInsta
 	if util.UseLaunchSecurity(vmi) {
 		domain.Spec.LaunchSecurity = c.Architecture.LaunchSecurity(vmi)
 	}
-	domain.Spec.LaunchSecurity = c.Architecture.LaunchSecurity(vmi)
 
 	if c.SMBios != nil {
 		domain.Spec.SysInfo.System = append(domain.Spec.SysInfo.System,
