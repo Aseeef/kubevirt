@@ -54,6 +54,7 @@ var nodeLabellerLabels = []string{
 	kubevirtv1.RealtimeLabel,
 	kubevirtv1.SEVLabel,
 	kubevirtv1.SEVESLabel,
+	kubevirtv1.SEVSNPLabel,
 	kubevirtv1.TDXLabel,
 	kubevirtv1.HostModelCPULabel,
 	kubevirtv1.HostModelRequiredFeaturesLabel,
@@ -166,14 +167,14 @@ func (n *NodeLabeller) loadAll() error {
 	if n.arch.hasHostSupportedFeatures() {
 		err := n.loadHostSupportedFeatures()
 		if err != nil {
-			n.logger.Errorf("node-labeller could not load supported features: " + err.Error())
+			n.logger.Errorf("node-labeller could not load supported features: %s", err.Error())
 			return err
 		}
 	}
 
 	err := n.loadDomCapabilities()
 	if err != nil {
-		n.logger.Errorf("node-labeller could not load host dom capabilities: " + err.Error())
+		n.logger.Errorf("node-labeller could not load host dom capabilities: %s", err.Error())
 		return err
 	}
 
@@ -299,6 +300,11 @@ func (n *NodeLabeller) prepareLabels(node *v1.Node) map[string]string {
 	if n.SEV.SupportedES == "yes" {
 		newLabels[kubevirtv1.SEVESLabel] = "true"
 	}
+
+	if n.SEV.SupportedSNP == "yes" {
+		newLabels[kubevirtv1.SEVSNPLabel] = "true"
+	}
+
 	if n.SecureExecution.Supported == "yes" {
 		newLabels[kubevirtv1.SecureExecutionLabel] = "true"
 	}

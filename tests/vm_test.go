@@ -23,7 +23,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -57,7 +56,6 @@ import (
 	"kubevirt.io/kubevirt/tests/flags"
 	"kubevirt.io/kubevirt/tests/framework/kubevirt"
 	. "kubevirt.io/kubevirt/tests/framework/matcher"
-	"kubevirt.io/kubevirt/tests/libdomain"
 	"kubevirt.io/kubevirt/tests/libkubevirt"
 	"kubevirt.io/kubevirt/tests/libkubevirt/config"
 	"kubevirt.io/kubevirt/tests/libnode"
@@ -400,10 +398,7 @@ var _ = Describe("[rfe_id:1177][crit:medium][vendor:cnv-qe@redhat.com][level:com
 				Expect(console.LoginToCirros(vmi)).To(Succeed())
 
 				By("Guest shutdown")
-				Expect(console.SafeExpectBatch(vmi, []expect.Batcher{
-					&expect.BSnd{S: "sudo poweroff\n"},
-					&expect.BExp{R: "The system is going down NOW!"},
-				}, 240)).To(Succeed())
+				powerOff(vmi)
 
 				By("waiting for the controller to replace the shut-down vmi with a new instance")
 				Eventually(ThisVMI(vmi), 240*time.Second, 1*time.Second).Should(BeRestarted(vmi.UID))
@@ -687,10 +682,7 @@ var _ = Describe("[rfe_id:1177][crit:medium][vendor:cnv-qe@redhat.com][level:com
 			Expect(console.LoginToCirros(vmi)).To(Succeed())
 
 			By("Issuing a poweroff command from inside VM")
-			Expect(console.SafeExpectBatch(vmi, []expect.Batcher{
-				&expect.BSnd{S: "sudo poweroff\n"},
-				&expect.BExp{R: console.PromptExpression},
-			}, 10)).To(Succeed())
+			powerOff(vmi)
 
 			By("Ensuring the VirtualMachineInstance enters Succeeded phase")
 			Eventually(ThisVMI(vmi), 240*time.Second, 1*time.Second).Should(HaveSucceeded())
@@ -762,10 +754,7 @@ var _ = Describe("[rfe_id:1177][crit:medium][vendor:cnv-qe@redhat.com][level:com
 				Expect(console.LoginToCirros(vmi)).To(Succeed())
 
 				By("Issuing a poweroff command from inside VM")
-				Expect(console.SafeExpectBatch(vmi, []expect.Batcher{
-					&expect.BSnd{S: "sudo poweroff\n"},
-					&expect.BExp{R: console.PromptExpression},
-				}, 10)).To(Succeed())
+				powerOff(vmi)
 
 				By("Ensuring the VirtualMachineInstance is restarted")
 				Eventually(ThisVMI(vmi), 240*time.Second, 1*time.Second).Should(BeRestarted(vmi.UID))
@@ -844,10 +833,7 @@ var _ = Describe("[rfe_id:1177][crit:medium][vendor:cnv-qe@redhat.com][level:com
 				Expect(console.LoginToCirros(vmi)).To(Succeed())
 
 				By("Issuing a poweroff command from inside VM")
-				Expect(console.SafeExpectBatch(vmi, []expect.Batcher{
-					&expect.BSnd{S: "sudo poweroff\n"},
-					&expect.BExp{R: console.PromptExpression},
-				}, 10)).To(Succeed())
+				powerOff(vmi)
 
 				By("Waiting for the VMI to disappear")
 				Eventually(func() error {
@@ -871,14 +857,14 @@ var _ = Describe("[rfe_id:1177][crit:medium][vendor:cnv-qe@redhat.com][level:com
 				vmi, err := virtClient.VirtualMachineInstance(vm.Namespace).Get(context.Background(), vm.Name, metav1.GetOptions{})
 				Expect(err).ToNot(HaveOccurred())
 
-				By("Triggering a segfault in qemu")
-				domSpec, err := libdomain.GetRunningVMIDomainSpec(vmi)
-				Expect(err).ToNot(HaveOccurred())
-				emulator := filepath.Base(domSpec.Devices.Emulator)
-				libpod.RunCommandOnVmiPod(vmi, []string{"killall", "-11", emulator})
-
-				By("Ensuring the VM stops")
-				Eventually(ThisVM(vm), 360*time.Second, 1*time.Second).Should(HavePrintableStatus(v1.VirtualMachineStatusStopped))
+				By("Killing the VirtualMachineInstance")
+				Expect(pkillVMI(kubevirt.Client(), vmi)).To(Succeed(), "Should deploy helper pod to kill VMI")
+				// Wait for stop event of the VirtualMachineInstance
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				objectEventWatcher := watcher.New(vmi).Timeout(60 * time.Second).SinceWatchedObjectResourceVersion()
+				Expect(objectEventWatcher).ToNot(BeNil(), "There should be a shutdown event")
+				objectEventWatcher.WaitFor(ctx, watcher.WarningEvent, v1.Stopped)
 
 				By("Waiting for VM to start again")
 				Eventually(ThisVM(vm), 360*time.Second, 1*time.Second).Should(HavePrintableStatus(v1.VirtualMachineStatusRunning))
@@ -898,11 +884,14 @@ var _ = Describe("[rfe_id:1177][crit:medium][vendor:cnv-qe@redhat.com][level:com
 				vmi, err := virtClient.VirtualMachineInstance(vm.Namespace).Get(context.Background(), vm.Name, metav1.GetOptions{})
 				Expect(err).ToNot(HaveOccurred())
 
-				By("Triggering a segfault in qemu")
-				domSpec, err := libdomain.GetRunningVMIDomainSpec(vmi)
-				Expect(err).ToNot(HaveOccurred())
-				emulator := filepath.Base(domSpec.Devices.Emulator)
-				libpod.RunCommandOnVmiPod(vmi, []string{"killall", "-11", emulator})
+				By("Killing the VirtualMachineInstance")
+				Expect(pkillVMI(kubevirt.Client(), vmi)).To(Succeed(), "Should deploy helper pod to kill VMI")
+				// Wait for stop event of the VirtualMachineInstance
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				objectEventWatcher := watcher.New(vmi).Timeout(60 * time.Second).SinceWatchedObjectResourceVersion()
+				Expect(objectEventWatcher).ToNot(BeNil(), "There should be a shutdown event")
+				objectEventWatcher.WaitFor(ctx, watcher.WarningEvent, v1.Stopped)
 
 				By("Ensuring the VirtualMachineInstance enters Failed phase")
 				Eventually(ThisVMI(vmi), 240*time.Second, 1*time.Second).Should(BeInPhase(v1.Failed))
@@ -1253,7 +1242,7 @@ func getHandlerNodePod(virtClient kubecli.KubevirtClient, nodeName string) *k8sv
 	pods, err := virtClient.CoreV1().Pods(flags.KubeVirtInstallNamespace).List(context.Background(),
 		metav1.ListOptions{
 			LabelSelector: "kubevirt.io=virt-handler",
-			FieldSelector: fmt.Sprintf("spec.nodeName=" + nodeName),
+			FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
 		})
 
 	Expect(err).NotTo(HaveOccurred())
@@ -1298,4 +1287,12 @@ func waitForVMStateTransition(vm *v1.VirtualMachine, expectedStates []v1.Virtual
 	for i, expectedState := range expectedStates {
 		Eventually(watch.ResultChan()).WithPolling(1*time.Second).WithTimeout(timeoutDuration).Should(Receive(WithTransform(getPrintableStatus, Equal(expectedState))), fmt.Sprintf("Failed watching the vm status moving to %s in the iteration number %d", expectedState, i))
 	}
+}
+
+func powerOff(vmi *v1.VirtualMachineInstance) {
+	// Can't use SafeExpectBatch since we may not get a prompt after the command
+	ExpectWithOffset(1, console.ExpectBatch(vmi, []expect.Batcher{
+		&expect.BSnd{S: "sudo poweroff\n"},
+		&expect.BExp{R: "The system is going down NOW!"},
+	}, 20*time.Second)).To(Succeed())
 }

@@ -29,18 +29,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net"
-	"net/rpc"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/json"
@@ -116,6 +110,7 @@ type LauncherClient interface {
 	InjectLaunchSecret(*v1.VirtualMachineInstance, *v1.SEVSecretOptions) error
 	SyncVirtualMachineMemory(vmi *v1.VirtualMachineInstance, options *cmdv1.VirtualMachineOptions) error
 	GetDomainDirtyRateStats() (dirtyRateMbps int64, err error)
+	GetScreenshot(*v1.VirtualMachineInstance) (*cmdv1.ScreenshotResponse, error)
 }
 
 type VirtLauncherClient struct {
@@ -239,17 +234,6 @@ func FindSocket(vmi *v1.VirtualMachineInstance) (string, error) {
 	host, _ := os.LookupEnv("NODE_NAME")
 	return FindSocketOnHost(vmi, host)
 }
-
-func SocketOnGuest() string {
-	sockFile := StandardLauncherSocketFileName
-	return filepath.Join(SocketsDirectory(), sockFile)
-}
-
-func UninitializedSocketOnGuest() string {
-	sockFile := StandardInitLauncherSocketFileName
-	return filepath.Join(SocketsDirectory(), sockFile)
-}
-
 func NewClient(socketPath string) (LauncherClient, error) {
 	// dial socket
 	conn, err := grpcutil.DialSocket(socketPath)
@@ -318,60 +302,6 @@ func (c *VirtLauncherClient) genericSendVMICmd(cmdName string,
 
 	err = handleError(err, cmdName, response)
 	return err
-}
-
-func IsUnimplemented(err error) bool {
-	if grpcStatus, ok := status.FromError(err); ok {
-		if grpcStatus.Code() == codes.Unimplemented {
-			return true
-		}
-	}
-	return false
-}
-func handleError(err error, cmdName string, response *cmdv1.Response) error {
-	if IsDisconnected(err) {
-		return err
-	} else if IsUnimplemented(err) {
-		return err
-	} else if err != nil {
-		msg := fmt.Sprintf("unknown error encountered sending command %s: %s", cmdName, err.Error())
-		return fmt.Errorf(msg)
-	} else if response != nil && !response.Success {
-		return fmt.Errorf("server error. command %s failed: %q", cmdName, response.Message)
-	}
-	return nil
-}
-
-func IsDisconnected(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	if err == rpc.ErrShutdown || err == io.ErrUnexpectedEOF || err == io.EOF {
-		return true
-	}
-
-	if opErr, ok := err.(*net.OpError); ok {
-		if syscallErr, ok := opErr.Err.(*os.SyscallError); ok {
-			// catches "connection reset by peer"
-			if syscallErr.Err == syscall.ECONNRESET {
-				return true
-			}
-		}
-	}
-
-	if grpcStatus, ok := status.FromError(err); ok {
-
-		// see https://github.com/grpc/grpc-go/blob/master/codes/codes.go
-		switch grpcStatus.Code() {
-		case codes.Canceled:
-			// e.g. v1client connection closing
-			return true
-		}
-
-	}
-
-	return false
 }
 
 func (c *VirtLauncherClient) SyncVirtualMachine(vmi *v1.VirtualMachineInstance, options *cmdv1.VirtualMachineOptions) error {
@@ -746,6 +676,24 @@ func (c *VirtLauncherClient) GuestPing(domainName string, timeoutSeconds int32) 
 
 	_, err := c.v1client.GuestPing(ctx, request)
 	return err
+}
+
+func (c *VirtLauncherClient) GetScreenshot(vmi *v1.VirtualMachineInstance) (*cmdv1.ScreenshotResponse, error) {
+	vmiJson, err := json.Marshal(vmi)
+	if err != nil {
+		return nil, err
+	}
+
+	request := &cmdv1.VMIRequest{
+		Vmi: &cmdv1.VMI{
+			VmiJson: vmiJson,
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), shortTimeout)
+	defer cancel()
+
+	return c.v1client.GetScreenshot(ctx, request)
 }
 
 func (c *VirtLauncherClient) GetSEVInfo() (*v1.SEVPlatformInfo, error) {

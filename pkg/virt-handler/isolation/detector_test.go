@@ -1,5 +1,5 @@
 /*
- * This file is part of the kubevirt project
+ * This file is part of the KubeVirt project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -92,25 +92,25 @@ var _ = Describe("Isolation Detector", func() {
 		})
 
 		It("Should detect the PID of the test suite", func() {
-			result, err := NewSocketBasedIsolationDetector(tmpDir).Detect(vm)
+			result, err := NewSocketBasedIsolationDetector().Detect(vm)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(result.Pid()).To(Equal(os.Getpid()))
 		})
 
 		It("Should detect the PID namespace of the test suite", func() {
-			result, err := NewSocketBasedIsolationDetector(tmpDir).Detect(vm)
+			result, err := NewSocketBasedIsolationDetector().Detect(vm)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(result.PIDNamespace()).To(Equal(fmt.Sprintf("/proc/%d/ns/pid", os.Getpid())))
 		})
 
 		It("Should detect the Parent PID of the test suite", func() {
-			result, err := NewSocketBasedIsolationDetector(tmpDir).Detect(vm)
+			result, err := NewSocketBasedIsolationDetector().Detect(vm)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(result.PPid()).To(Equal(os.Getppid()))
 		})
 
 		It("Should detect the Mount root of the test suite", func() {
-			result, err := NewSocketBasedIsolationDetector(tmpDir).Detect(vm)
+			result, err := NewSocketBasedIsolationDetector().Detect(vm)
 			Expect(err).ToNot(HaveOccurred())
 			root, err := result.MountRoot()
 			Expect(err).ToNot(HaveOccurred())

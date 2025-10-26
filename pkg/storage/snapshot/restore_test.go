@@ -324,7 +324,9 @@ var _ = Describe("Restore controller", func() {
 				Expect(action).To(BeNil())
 				return true, nil, nil
 			})
-
+			k8sClient.Fake.PrependReactor("get", "persistentvolumeclaims", func(action testing.Action) (handled bool, obj runtime.Object, err error) {
+				return true, nil, nil
+			})
 			currentTime = timeFunc
 		})
 
@@ -775,6 +777,63 @@ var _ = Describe("Restore controller", func() {
 				Expect(*updateVMCalls).To(Equal(1))
 			})
 
+			It("restored pvc is owned by target VM when volume ownership policy is set to VM", func() {
+				r := createRestoreWithOwner()
+				r.ResourceVersion = "1"
+				r.Status = &snapshotv1.VirtualMachineRestoreStatus{
+					Complete: pointer.P(false),
+					Conditions: []snapshotv1.Condition{
+						newProgressingCondition(corev1.ConditionTrue, "Creating new PVCs"),
+						newReadyCondition(corev1.ConditionFalse, "Waiting for new PVCs"),
+					},
+				}
+
+				// We could omit this, as it is the default policy
+				r.Spec.VolumeOwnershipPolicy = pointer.P(snapshotv1.VolumeOwnershipPolicyVm)
+
+				addInitialVolumeRestores(r)
+				vs := createVolumeSnapshot(r.Status.Restores[0].VolumeSnapshotName, resource.MustParse("2Gi"))
+				fakeVolumeSnapshotProvider.Add(vs)
+
+				vm := createRestoreInProgressVM()
+				Expect(controller.VMInformer.GetStore().Add(vm)).To(Succeed())
+
+				ref := []metav1.OwnerReference{
+					*metav1.NewControllerRef(vm, schema.GroupVersionKind{Group: "kubevirt.io", Version: "v1", Kind: "VirtualMachine"}),
+				}
+
+				createdPVCCalls := expectPVCCreatesWithOwnership(k8sClient, ref)
+
+				addVirtualMachineRestore(r)
+				controller.processVMRestoreWorkItem()
+				Expect(*createdPVCCalls).To(Equal(1)) // Restored PVC is owned by the VM
+			})
+
+			It("restored pvc has not owner when volume ownership policy is set to none", func() {
+				r := createRestoreWithOwner()
+				r.ResourceVersion = "1"
+				r.Status = &snapshotv1.VirtualMachineRestoreStatus{
+					Complete: pointer.P(false),
+					Conditions: []snapshotv1.Condition{
+						newProgressingCondition(corev1.ConditionTrue, "Creating new PVCs"),
+						newReadyCondition(corev1.ConditionFalse, "Waiting for new PVCs"),
+					},
+				}
+				r.Spec.VolumeOwnershipPolicy = pointer.P(snapshotv1.VolumeOwnershipPolicyNone)
+				addInitialVolumeRestores(r)
+				vs := createVolumeSnapshot(r.Status.Restores[0].VolumeSnapshotName, resource.MustParse("2Gi"))
+				fakeVolumeSnapshotProvider.Add(vs)
+
+				vm := createRestoreInProgressVM()
+				Expect(controller.VMInformer.GetStore().Add(vm)).To(Succeed())
+
+				createdPVCCalls := expectPVCCreatesWithOwnership(k8sClient, nil)
+
+				addVirtualMachineRestore(r)
+				controller.processVMRestoreWorkItem()
+				Expect(*createdPVCCalls).To(Equal(1)) // Restored PVC is owned by nothing
+			})
+
 			It("volume is set to be overwritten when volume restore policy is InPlace", func() {
 				r := createRestoreWithOwner()
 				r.Status.Conditions = []snapshotv1.Condition{
@@ -835,7 +894,6 @@ var _ = Describe("Restore controller", func() {
 				Expect(*updateStatusCalls).To(Equal(1))    // Restore is updated to mark DV owns the PVC
 				Expect(*patchDataVolumeCalls).To(Equal(0)) // DV not set to prepopulated yet
 				Expect(*deletePVCCalls).To(Equal(0))       // PVC hasn't been deleted yet
-
 			})
 
 			It("source volume/DV gets deleted when volume restore policy is InPlace", func() {
@@ -2332,7 +2390,7 @@ func expectVMCreateFailure(client *kubevirtfake.Clientset, failureMsg string) *i
 
 		calls++
 
-		return true, nil, fmt.Errorf(failureMsg)
+		return true, nil, fmt.Errorf("%s", failureMsg)
 	})
 	return &calls
 }
@@ -2461,6 +2519,22 @@ func expectPVCCreatesWithMetadata(client *k8sfake.Clientset, vmRestore *snapshot
 	return &calls
 }
 
+func expectPVCCreatesWithOwnership(client *k8sfake.Clientset, ref []metav1.OwnerReference) *int {
+	calls := 0
+	client.Fake.PrependReactor("create", "persistentvolumeclaims", func(action testing.Action) (handled bool, obj runtime.Object, err error) {
+		create, ok := action.(testing.CreateAction)
+		Expect(ok).To(BeTrue())
+
+		createObj := create.GetObject().(*corev1.PersistentVolumeClaim)
+		found := reflect.DeepEqual(createObj.OwnerReferences, ref)
+		Expect(found).To(BeTrue())
+
+		calls++
+		return true, create.GetObject(), nil
+	})
+	return &calls
+}
+
 func expectPVCDeletion(client *k8sfake.Clientset, vmRestore *snapshotv1.VirtualMachineRestore) *int {
 	calls := 0
 	client.Fake.PrependReactor("delete", "persistentvolumeclaims", func(action testing.Action) (handled bool, obj runtime.Object, err error) {
@@ -2524,6 +2598,9 @@ func expectPVCUpdates(client *k8sfake.Clientset, vmRestore *snapshotv1.VirtualMa
 
 		updateObj := update.GetObject().(*corev1.PersistentVolumeClaim)
 		found := false
+		if updateObj.Name == "" {
+			return true, nil, nil
+		}
 		for _, vr := range vmRestore.Status.Restores {
 			if vr.DataVolumeName != nil && *vr.DataVolumeName == updateObj.Annotations["cdi.kubevirt.io/storage.populatedFor"] {
 				found = true

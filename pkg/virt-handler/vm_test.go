@@ -247,6 +247,13 @@ var _ = Describe("VirtualMachineInstance", func() {
 		controller.queue.Add(key)
 	}
 
+	updateDomain := func(domain *api.Domain) {
+		Expect(controller.domainStore.Update(domain)).To(Succeed())
+		key, err := virtcontroller.KeyFunc(domain)
+		Expect(err).ToNot(HaveOccurred())
+		controller.queue.Add(key)
+	}
+
 	sanityExecute := func() {
 		controllertesting.SanityExecute(controller, []cache.Store{
 			controller.domainStore, controller.vmiStore,
@@ -371,6 +378,29 @@ var _ = Describe("VirtualMachineInstance", func() {
 
 			sanityExecute()
 			testutils.ExpectEvent(recorder, VMIGracefulShutdown)
+		})
+
+		It("should only emit one graceful shutdown event", func() {
+			vmi := api2.NewMinimalVMI("testvmi")
+			vmi.UID = vmiTestUUID
+
+			domain := api.NewMinimalDomainWithUUID("testvmi", vmiTestUUID)
+			domain.Status.Status = api.Running
+
+			initGracePeriodHelper(600, vmi, domain)
+
+			client.EXPECT().ShutdownVirtualMachine(libvmi.New(libvmi.WithName("testvmi"), libvmi.WithUID(vmiTestUUID), libvmi.WithNamespace(metav1.NamespaceDefault))).Times(2)
+			addDomain(domain)
+
+			sanityExecute()
+			testutils.ExpectEvent(recorder, VMIGracefulShutdown)
+
+			// Set the DeletionTimestamp within the domain so this is treated as a graceful shutdown retry
+			domain.Spec.Metadata.KubeVirt.GracePeriod.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+			updateDomain(domain)
+
+			// AfterEach will assert that no additional events are seen
+			sanityExecute()
 		})
 
 		It("should attempt graceful shutdown and take the VMI grace period over the cached Domain grace", func() {
@@ -2950,6 +2980,45 @@ var _ = Describe("VirtualMachineInstance", func() {
 			updatedVMI, err := virtfakeClient.KubevirtV1().VirtualMachineInstances(metav1.NamespaceDefault).Get(context.TODO(), vmi.Name, metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updatedVMI.Status.Phase).To(Equal(v1.Failed))
+		})
+	})
+
+	Context("on VM stop / VMI delete during migration", func() {
+		It("should kill the VM", func() {
+			By("Creating a migrating VMI with a domain in failed post-copy migration state")
+			now := metav1.Now()
+			vmi := libvmi.New(
+				libvmi.WithUID(vmiTestUUID),
+				libvmi.WithNamespace("default"),
+				libvmi.WithName("testvmi"),
+				libvmi.WithHostname(host),
+				libvmistatus.WithStatus(
+					libvmistatus.New(
+						libvmistatus.WithPhase(v1.Running),
+						libvmistatus.WithMigrationState(
+							v1.VirtualMachineInstanceMigrationState{
+								TargetNode:                     "abc",
+								TargetNodeAddress:              "127.0.0.1:12345",
+								SourceNode:                     host,
+								MigrationUID:                   "123",
+								TargetNodeDomainDetected:       true,
+								TargetNodeDomainReadyTimestamp: &now,
+								StartTimestamp:                 &now,
+							},
+						),
+					),
+				),
+			)
+			vmi.DeletionTimestamp = &now
+			domain := api.NewMinimalDomainWithUUID("testvmi", vmiTestUUID)
+			domain.Status.Status = api.Running
+			domain.Status.Reason = api.ReasonUnknown
+			addVMI(vmi, domain)
+
+			By("Executing the controller")
+			client.EXPECT().KillVirtualMachine(gomock.Any())
+			sanityExecute()
+			expectEvent("VirtualMachineInstance stopping", true)
 		})
 	})
 })

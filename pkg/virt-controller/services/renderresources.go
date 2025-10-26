@@ -253,6 +253,14 @@ func WithHugePages(vmMemory *v1.Memory, memoryOverhead resource.Quantity) Resour
 	}
 }
 
+func WithMemoryOvercommit(overcommit int) ResourceRendererOption {
+	return func(renderer *ResourceRenderer) {
+		memory := renderer.vmRequests[k8sv1.ResourceMemory]
+		memory = *resource.NewQuantity((memory.Value()*int64(100))/int64(overcommit), memory.Format)
+		renderer.vmRequests[k8sv1.ResourceMemory] = memory
+	}
+}
+
 func WithMemoryOverhead(guestResourceSpec v1.ResourceRequirements, memoryOverhead resource.Quantity) ResourceRendererOption {
 	return func(renderer *ResourceRenderer) {
 		memoryRequest := renderer.vmRequests[k8sv1.ResourceMemory]
@@ -468,7 +476,7 @@ func GetMemoryOverhead(vmi *v1.VirtualMachineInstance, cpuArch string, additiona
 
 	// Consider memory overhead for SEV guests.
 	// Additional information can be found here: https://libvirt.org/kbase/launch_security_sev.html#memory
-	if util.IsSEVVMI(vmi) {
+	if util.IsSEVVMI(vmi) || util.IsSEVSNPVMI(vmi) || util.IsSEVESVMI(vmi) {
 		overhead.Add(resource.MustParse("256Mi"))
 	}
 
@@ -603,7 +611,7 @@ func validatePermittedHostDevices(spec *v1.VirtualMachineInstanceSpec, config *v
 	}
 
 	if len(errors) != 0 {
-		return fmt.Errorf(strings.Join(errors, " "))
+		return fmt.Errorf("%s", strings.Join(errors, " "))
 	}
 
 	return nil

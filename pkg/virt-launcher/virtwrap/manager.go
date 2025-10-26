@@ -26,6 +26,7 @@ package virtwrap
 */
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/xml"
@@ -43,6 +44,7 @@ import (
 	"time"
 
 	"kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap/device/hostdevice/dra"
+	"kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap/network"
 
 	"libvirt.org/go/libvirt"
 
@@ -73,6 +75,7 @@ import (
 	osdisk "kubevirt.io/kubevirt/pkg/os/disk"
 	"kubevirt.io/kubevirt/pkg/pointer"
 	"kubevirt.io/kubevirt/pkg/safepath"
+	"kubevirt.io/kubevirt/pkg/storage/cbt"
 	storagetypes "kubevirt.io/kubevirt/pkg/storage/types"
 	"kubevirt.io/kubevirt/pkg/tpm"
 	"kubevirt.io/kubevirt/pkg/unsafepath"
@@ -160,6 +163,7 @@ type DomainManager interface {
 	InjectLaunchSecret(*v1.VirtualMachineInstance, *v1.SEVSecretOptions) error
 	UpdateGuestMemory(vmi *v1.VirtualMachineInstance) error
 	GetDomainDirtyRateStats(calculationDuration time.Duration) (*stats.DomainStatsDirtyRate, error)
+	GetScreenshot(vmi *v1.VirtualMachineInstance) (*cmdv1.ScreenshotResponse, error)
 }
 
 type LibvirtDomainManager struct {
@@ -1034,18 +1038,21 @@ func (l *LibvirtDomainManager) generateConverterContext(vmi *v1.VirtualMachineIn
 	var efiConf *converter.EFIConfiguration
 	if vmi.IsBootloaderEFI() {
 		secureBoot := vmi.Spec.Domain.Firmware.Bootloader.EFI.SecureBoot == nil || *vmi.Spec.Domain.Firmware.Bootloader.EFI.SecureBoot
-		sev := kutil.IsSEVVMI(vmi)
+		sev := kutil.IsSEVVMI(vmi) && !kutil.IsSEVSNPVMI(vmi)
+		snp := kutil.IsSEVSNPVMI(vmi)
 		tdx := kutil.IsTDXVMI(vmi)
-		vmType := efi.STD
+
+		vmType := efi.None
 		if sev {
 			vmType = efi.SEV
+		} else if snp {
+			vmType = efi.SNP
 		} else if tdx {
 			vmType = efi.TDX
 		}
-
 		if !l.efiEnvironment.Bootable(secureBoot, vmType) {
-			log.Log.Errorf("EFI OVMF roms missing for booting in EFI mode with SecureBoot=%v, SEV=%v, TDX=%v", secureBoot, sev, tdx)
-			return nil, fmt.Errorf("EFI OVMF roms missing for booting in EFI mode with SecureBoot=%v, SEV=%v, TDX=%v", secureBoot, sev, tdx)
+			log.Log.Errorf("EFI OVMF roms missing for booting in EFI mode with SecureBoot=%v, SEV/SEV-ES=%v, SEV-SNP=%v, TDX=%v", secureBoot, sev, snp, tdx)
+			return nil, fmt.Errorf("EFI OVMF roms missing for booting in EFI mode with SecureBoot=%v, SEV/SEV-ES=%v, SEV-SNP=%v, TDX=%v", secureBoot, sev, snp, tdx)
 		}
 
 		efiConf = &converter.EFIConfiguration{
@@ -1067,7 +1074,7 @@ func (l *LibvirtDomainManager) generateConverterContext(vmi *v1.VirtualMachineIn
 		UseVirtioTransitional: vmi.Spec.Domain.Devices.UseVirtioTransitional != nil && *vmi.Spec.Domain.Devices.UseVirtioTransitional,
 		PermanentVolumes:      permanentVolumes,
 		EphemeraldiskCreator:  l.ephemeralDiskCreator,
-		UseLaunchSecuritySEV:  kutil.IsSEVVMI(vmi),
+		UseLaunchSecuritySEV:  kutil.IsSEVVMI(vmi), // Return true whenever SEV/ES/SNP is set
 		UseLaunchSecurityTDX:  kutil.IsTDXVMI(vmi),
 		UseLaunchSecurityPV:   kutil.IsSecureExecutionVMI(vmi),
 		FreePageReporting:     isFreePageReportingEnabled(false, vmi),
@@ -1149,6 +1156,10 @@ func isSerialConsoleLogEnabled(clusterSerialConsoleLogDisabled bool, vmi *v1.Vir
 	return (vmi.Spec.Domain.Devices.LogSerialConsole != nil && *vmi.Spec.Domain.Devices.LogSerialConsole) || (vmi.Spec.Domain.Devices.LogSerialConsole == nil && !clusterSerialConsoleLogDisabled)
 }
 
+func needToCreateQCOW2Overlay(vmi *v1.VirtualMachineInstance) bool {
+	return cbt.CompareCBTState(vmi.Status.ChangedBlockTracking, v1.ChangedBlockTrackingInitializing)
+}
+
 func (l *LibvirtDomainManager) SyncVMI(vmi *v1.VirtualMachineInstance, allowEmulation bool, options *cmdv1.VirtualMachineOptions) (*api.DomainSpec, error) {
 	l.domainModifyLock.Lock()
 	defer l.domainModifyLock.Unlock()
@@ -1169,6 +1180,13 @@ func (l *LibvirtDomainManager) SyncVMI(vmi *v1.VirtualMachineInstance, allowEmul
 	if err != nil {
 		logger.Reason(err).Error("failed to generate libvirt domain from VMI spec")
 		return nil, err
+	}
+
+	if cbt.HasCBTStateEnabled(vmi.Status.ChangedBlockTracking) {
+		if err := applyChangedBlockTracking(vmi, c); err != nil {
+			logger.Reason(err).Error("failed to apply CBT")
+			return nil, err
+		}
 	}
 
 	if err := converter.Convert_v1_VirtualMachineInstance_To_api_Domain(vmi, domain, c); err != nil {
@@ -1217,7 +1235,11 @@ func (l *LibvirtDomainManager) SyncVMI(vmi *v1.VirtualMachineInstance, allowEmul
 		return nil, err
 	}
 
-	if err := l.syncNetwork(domain, oldSpec, dom, vmi, options); err != nil {
+	var domainAttachments map[string]string
+	if options != nil {
+		domainAttachments = options.GetInterfaceDomainAttachment()
+	}
+	if err := network.Sync(domain, oldSpec, dom, vmi, domainAttachments); err != nil {
 		return nil, err
 	}
 
@@ -1225,6 +1247,108 @@ func (l *LibvirtDomainManager) SyncVMI(vmi *v1.VirtualMachineInstance, allowEmul
 
 	// TODO: check if VirtualMachineInstance Spec and Domain Spec are equal or if we have to sync
 	return oldSpec, nil
+}
+
+var createQCOW2Overlay = createQCOW2OverlayFunc
+
+func createQCOW2OverlayFunc(overlayPath, imagePath string, blockDev bool) error {
+	if _, err := os.Stat(overlayPath); err == nil {
+		log.Log.V(3).Infof("overlay %s already exists", overlayPath)
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		log.Log.Reason(err).Errorf("Error checking QCOW2 overlay %s existence", overlayPath)
+		return err
+	}
+
+	_, err := os.Create(overlayPath)
+	if err != nil {
+		log.Log.Reason(err).Errorf("Error creating file QCOW2 overlay %s", overlayPath)
+		return err
+	}
+
+	defer func(path string) {
+		if err != nil {
+			log.Log.Errorf("Deleting QCOW2 overlay %s due to failure %s", path, err)
+			os.Remove(path)
+		}
+	}(overlayPath)
+
+	info, err := osdisk.GetDiskInfo(imagePath)
+	if err != nil {
+		return fmt.Errorf("failed to get image info for image %q", imagePath)
+	}
+	overlaySize := info.VirtualSize
+
+	qmpCapabilities := `{"execute": "qmp_capabilities"}`
+	blockdevCreate := fmt.Sprintf(`{"execute": "blockdev-create", "arguments": {"job-id": "create", "options": {"driver": "qcow2", "file": "file", "data-file": "data-file", "data-file-raw": true, "size": %d}}}`, overlaySize)
+	jobDismiss := `{"execute": "job-dismiss", "arguments": {"id": "create"}}`
+	quit := `{"execute": "quit"}`
+	cmdInput := fmt.Sprintf("%s\n%s\n%s\n%s\n", qmpCapabilities, blockdevCreate, jobDismiss, quit)
+
+	args := append([]string{},
+		"--chardev", "stdio,id=stdio", "--monitor", "stdio",
+		"--blockdev", fmt.Sprintf("file,node-name=file,filename=%s", overlayPath))
+
+	if blockDev {
+		args = append(args, "--blockdev", fmt.Sprintf("host_device,node-name=data-file,filename=%s", imagePath))
+	} else {
+		args = append(args, "--blockdev", fmt.Sprintf("file,node-name=data-file,filename=%s", imagePath))
+	}
+
+	log.Log.V(3).Infof("QCOW2 overlay execute %v", args)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "qemu-storage-daemon", args...)
+	cmd.Stdin = bytes.NewBufferString(cmdInput)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to create QCOW2 overlay %s: %v, output: %s", overlayPath, err, output)
+	}
+
+	log.Log.Infof("QCOW2 overlay %s created successfully", overlayPath)
+	return nil
+}
+
+func applyChangedBlockTracking(vmi *v1.VirtualMachineInstance, c *converter.ConverterContext) error {
+	logger := log.Log.Object(vmi)
+	applyCBTMap := make(map[string]string)
+
+	// create overlay for every disk supporting changedBlockTracking
+	for _, volume := range vmi.Spec.Volumes {
+		volumeName := volume.Name
+		logger.V(3).Infof("Creating QCOW2 overlay for %+v", volume)
+		if !cbt.IsCBTEligibleVolume(&volume) {
+			logger.V(3).Infof("SKIP Creating QCOW2 overlay for %s", volume.Name)
+			continue
+		}
+
+		overlayPath := cbt.GetQCOW2OverlayPath(vmi, volumeName)
+		logger.V(3).Infof("QCOW2 overlay path is %s", overlayPath)
+		if !needToCreateQCOW2Overlay(vmi) {
+			applyCBTMap[volumeName] = overlayPath
+			continue
+		}
+
+		var imagePath string
+		blockDev := false
+		if c.IsBlockPVC[volumeName] || c.IsBlockDV[volumeName] {
+			imagePath = converter.GetBlockDeviceVolumePath(volumeName)
+			blockDev = true
+		} else {
+			imagePath = converter.GetFilesystemVolumePath(volumeName)
+		}
+
+		err := createQCOW2Overlay(overlayPath, imagePath, blockDev)
+		if err != nil {
+			return err
+		}
+		applyCBTMap[volumeName] = overlayPath
+	}
+
+	c.ApplyCBT = applyCBTMap
+	return nil
 }
 
 func (l *LibvirtDomainManager) syncDisks(
@@ -1326,36 +1450,6 @@ func (l *LibvirtDomainManager) syncDisks(
 	return nil
 }
 
-func (l *LibvirtDomainManager) syncNetwork(
-	domain *api.Domain,
-	oldSpec *api.DomainSpec,
-	dom cli.VirDomain,
-	vmi *v1.VirtualMachineInstance,
-	options *cmdv1.VirtualMachineOptions,
-) error {
-	if !vmi.IsRunning() {
-		return nil
-	}
-	var domainAttachments map[string]string
-	if options != nil {
-		domainAttachments = options.GetInterfaceDomainAttachment()
-	}
-
-	networkConfigurator := netsetup.NewVMNetworkConfigurator(vmi, cache.CacheCreator{}, netsetup.WithDomainAttachments(domainAttachments))
-	networkInterfaceManager := newVirtIOInterfaceManager(dom, networkConfigurator)
-	if err := networkInterfaceManager.hotplugVirtioInterface(vmi, &api.Domain{Spec: *oldSpec}, domain); err != nil {
-		return err
-	}
-	if err := networkInterfaceManager.hotUnplugVirtioInterface(vmi, &api.Domain{Spec: *oldSpec}); err != nil {
-		return err
-	}
-	if err := networkInterfaceManager.updateDomainLinkState(&api.Domain{Spec: *oldSpec}, domain); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (l *LibvirtDomainManager) startDomain(
 	vmi *v1.VirtualMachineInstance,
 	dom cli.VirDomain,
@@ -1435,7 +1529,7 @@ func (l *LibvirtDomainManager) allocateHotplugPorts(
 
 	// leverage existing hotplug nic code to allocate ports
 	// should work for disks and any other devices as well
-	dom, err := withNetworkIfacesResources(vmi, domainSpec, count, setDomainFn)
+	dom, err := network.WithNetworkIfacesResources(vmi, domainSpec, count, setDomainFn)
 	if err != nil {
 		return nil, err
 	}
@@ -1444,8 +1538,12 @@ func (l *LibvirtDomainManager) allocateHotplugPorts(
 }
 
 func getSourceFile(disk api.Disk) string {
-	file := disk.Source.File
-	if disk.Source.File == "" {
+	source := disk.Source
+	if source.DataStore != nil {
+		source = *source.DataStore.Source
+	}
+	file := source.File
+	if source.File == "" {
 		file = disk.Source.Dev
 	}
 	return file
@@ -2454,6 +2552,42 @@ func (l *LibvirtDomainManager) GetFilesystems() []v1.VirtualMachineInstanceFileS
 	}
 
 	return fsList
+}
+
+func (l *LibvirtDomainManager) GetScreenshot(vmi *v1.VirtualMachineInstance) (*cmdv1.ScreenshotResponse, error) {
+	domName := api.VMINamespaceKeyFunc(vmi)
+	dom, err := l.virConn.LookupDomainByName(domName)
+	if err != nil {
+		log.Log.Object(vmi).Reason(err).Error(failedGetDomain)
+		return nil, err
+	}
+	defer dom.Free()
+
+	stream, err := l.virConn.NewStream(0)
+	if err != nil {
+		log.Log.Object(vmi).Reason(err).Error("Failed to create stream")
+		return nil, err
+	}
+	defer stream.Close()
+
+	// Primary display only; Flags are unused
+	// https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainScreenshot
+	mime, err := dom.Screenshot(stream.UnderlyingStream(), 0, 0)
+	if err != nil {
+		log.Log.Object(vmi).Reason(err).Error("Failed to call libvirt's Screenshot API")
+		return nil, err
+	}
+
+	data, err := io.ReadAll(stream)
+	if err != nil {
+		log.Log.Object(vmi).Reason(err).Error("ReadAll from stream failed")
+		return nil, err
+	}
+	log.Log.Object(vmi).V(4).Infof("Screenshot successful: %d bytes, mime: %s", len(data), mime)
+	return &cmdv1.ScreenshotResponse{
+		Mime: mime,
+		Data: data,
+	}, nil
 }
 
 func (l *LibvirtDomainManager) GetSEVInfo() (*v1.SEVPlatformInfo, error) {

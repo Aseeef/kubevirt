@@ -322,6 +322,11 @@ type VirtualMachineInstanceStatus struct {
 	// This feature is in alpha.
 	// +optional
 	DeviceStatus *DeviceStatus `json:"deviceStatus,omitempty"`
+
+	// ChangedBlockTracking represents the status of the changedBlockTracking
+	// +nullable
+	// +optional
+	ChangedBlockTracking *ChangedBlockTrackingStatus `json:"changedBlockTracking,omitempty" optional:"true"`
 }
 
 // DeviceStatus has the information of all devices allocated spec.domain.devices
@@ -719,6 +724,9 @@ const (
 
 	// VirtualMachineInstanceMigrationRequired Indicates that an automatic migration is required
 	VirtualMachineInstanceMigrationRequired VirtualMachineInstanceConditionType = "MigrationRequired"
+
+	// VirtualMachineInstanceEvictionRequested indicates that an eviction has been requested for the VMI
+	VirtualMachineInstanceEvictionRequested VirtualMachineInstanceConditionType = "EvictionRequested"
 )
 
 // These are valid reasons for VMI conditions.
@@ -761,6 +769,9 @@ const (
 
 	// Indicates that automatic migration is pending
 	VirtualMachineInstanceReasonAutoMigrationPending = "AutoMigrationPending"
+
+	// Indicates that an eviction has been requested for the VMI
+	VirtualMachineInstanceReasonEvictionRequested = "EvictionRequested"
 )
 
 const (
@@ -1273,6 +1284,9 @@ const (
 	// SecureExecutionLabel marks the node as capable of running workloads with IBM Secure Execution
 	SecureExecutionLabel string = "kubevirt.io/s390-pv"
 
+	// SEVSNPLabel marks the node as capable of running workloads with SEV-SNP
+	SEVSNPLabel string = "kubevirt.io/sev-snp"
+
 	// TDXLabel marks the node as capable of running workloads with Intel TDX
 	TDXLabel string = "kubevirt.io/tdx"
 
@@ -1307,8 +1321,15 @@ const (
 	// originated from.
 	VirtualMachinePoolRevisionName string = "kubevirt.io/vm-pool-revision-name"
 
-	// VirtualMachineNameLabel is the name of the Virtual Machine
-	VirtualMachineNameLabel string = "vm.kubevirt.io/name"
+	// DeprecatedVirtualMachineNameLabel is the name of the Virtual Machine
+	// Deprecated: Use VirtualMachineInstanceSelectorLabel instead. Kept for backwards compatibility.
+	DeprecatedVirtualMachineNameLabel string = "vm.kubevirt.io/name"
+
+	// VirtualMachineInstanceIDLabel is applied to virt-launcher pods to provide a
+	// stable and unique identifier for a VMI, suitable for use in service selectors.
+	// For VMI names longer than 63 characters, its value is a truncated and hashed
+	// representation of the name to ensure uniqueness.
+	VirtualMachineInstanceIDLabel = "vmi.kubevirt.io/id"
 
 	// PVCMemoryDumpAnnotation is the name of the memory dump representing the vm name,
 	// pvc name and the timestamp the memory dump was collected
@@ -2009,6 +2030,11 @@ type VirtualMachineStatus struct {
 	// updates related to the volumeUpdateStrategy
 	VolumeUpdateState *VolumeUpdateState `json:"volumeUpdateState,omitempty" optional:"true"`
 
+	// ChangedBlockTracking represents the status of the changedBlockTracking
+	// +nullable
+	// +optional
+	ChangedBlockTracking *ChangedBlockTrackingStatus `json:"changedBlockTracking,omitempty" optional:"true"`
+
 	// InstancetypeRef captures the state of any referenced instance type from the VirtualMachine
 	//+nullable
 	//+optional
@@ -2045,6 +2071,36 @@ type InstancetypeStatusRef struct {
 	//
 	// +optional
 	InferFromVolumeFailurePolicy *InferFromVolumeFailurePolicy `json:"inferFromVolumeFailurePolicy,omitempty"`
+}
+
+type ChangedBlockTrackingState string
+
+const (
+	// ChangedBlockTrackingUndefined indicates no updates for changedBlockTracking was made
+	ChangedBlockTrackingUndefined ChangedBlockTrackingState = ""
+
+	// ChangedBlockTrackingPendingRestart indicates the VM needs a restart for the changes to take effect. This state field will be deprecated once dynamic QCOW2 overylay addition will be supported
+	ChangedBlockTrackingPendingRestart ChangedBlockTrackingState = "PendingRestart"
+
+	// ChangedBlockTrackingInitializing VM restart has occurred, necessary steps for changedBlockTracking are in progress
+	ChangedBlockTrackingInitializing ChangedBlockTrackingState = "Initializing"
+
+	// ChangedBlockTrackingEnabled the VM's supported volumes now have Changed Block Tracking enabled with a QCOW2 overlay
+	ChangedBlockTrackingEnabled ChangedBlockTrackingState = "Enabled"
+
+	// ChangedBlockTrackingDisabled VM no longer matches changedBlockTracking label selector
+	ChangedBlockTrackingDisabled ChangedBlockTrackingState = "Disabled"
+
+	// ChangedBlockTrackingFGDisabled indicates the vm matches the labelselector but the IncrementalBackupGate is disabled
+	// so until the gate is enabled no changed will be made.
+	ChangedBlockTrackingFGDisabled ChangedBlockTrackingState = "IncrementalBackupFeatureGateDisabled"
+)
+
+// ChangedBlockTrackingStatus represents the status of ChangedBlockTracking for a VM
+// +k8s:openapi-gen=true
+type ChangedBlockTrackingStatus struct {
+	// State represents the current CBT state
+	State ChangedBlockTrackingState `json:"state"`
 }
 
 type VolumeUpdateState struct {
@@ -2925,6 +2981,20 @@ type KubeVirtConfiguration struct {
 	// Instancetype configuration
 	// +nullable
 	Instancetype *InstancetypeConfiguration `json:"instancetype,omitempty"`
+
+	// ChangedBlockTrackingLabelSelectors defines label selectors. VMs matching these selectors will have changed block tracking enabled.
+	// Enabling changedBlockTracking is mandatory for performing storage-agnostic backups and incremental backups.
+	// +nullable
+	ChangedBlockTrackingLabelSelectors *ChangedBlockTrackingSelectors `json:"changedBlockTrackingLabelSelectors,omitempty"`
+}
+
+type ChangedBlockTrackingSelectors struct {
+	// NamespaceSelector will enable changedBlockTracking on all VMs running inside namespaces that match the label selector.
+	//+optional
+	NamespaceLabelSelector *metav1.LabelSelector `json:"namespaceLabelSelector,omitempty"`
+	// VirtualMachineSelector will enable changedBlockTracking on all VMs that match the label selector.
+	//+optional
+	VirtualMachineLabelSelector *metav1.LabelSelector `json:"virtualMachineLabelSelector,omitempty"`
 }
 
 type InstancetypeConfiguration struct {
@@ -2964,8 +3034,10 @@ const (
 )
 
 type ArchConfiguration struct {
-	Amd64               *ArchSpecificConfiguration `json:"amd64,omitempty"`
-	Arm64               *ArchSpecificConfiguration `json:"arm64,omitempty"`
+	Amd64 *ArchSpecificConfiguration `json:"amd64,omitempty"`
+	Arm64 *ArchSpecificConfiguration `json:"arm64,omitempty"`
+
+	// Deprecated: ppc64le architecture is no longer supported.
 	Ppc64le             *ArchSpecificConfiguration `json:"ppc64le,omitempty"`
 	S390x               *ArchSpecificConfiguration `json:"s390x,omitempty"`
 	DefaultArchitecture string                     `json:"defaultArchitecture,omitempty"`
@@ -3145,6 +3217,7 @@ type DeveloperConfiguration struct {
 	// "see" 2% more memory than its parent pod. Values under 100 are effectively "undercommits".
 	// Overcommits can lead to memory exhaustion, which in turn can lead to crashes. Use carefully.
 	// Defaults to 100
+	// +kubebuilder:validation:Minimum:=10
 	MemoryOvercommit int `json:"memoryOvercommit,omitempty"`
 	// NodeSelectors allows restricting VMI creation to nodes that match a set of labels.
 	// Defaults to none

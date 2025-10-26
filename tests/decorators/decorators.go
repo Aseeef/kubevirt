@@ -25,6 +25,7 @@ var (
 	VGPU        = Label("VGPU")
 	SEV         = Label("SEV")
 	SEVES       = Label("SEVES")
+	SEVSNP      = Label("SEVSNP")
 	SRIOV       = Label("SRIOV")
 	StorageReq  = Label("storage-req")
 	Multus      = Label("Multus")
@@ -48,8 +49,6 @@ var (
 	Networking                           = Label("Networking")
 	VMIlifecycle                         = Label("VMIlifecycle")
 	Expose                               = Label("Expose")
-	NativeSSH                            = Label("native-ssh")
-	ExcludeNativeSSH                     = Label("exclude-native-ssh")
 	Reenlightenment                      = Label("Reenlightenment")
 	TscFrequencies                       = Label("TscFrequencies")
 	HostDiskGate                         = Label("HostDiskGate")
@@ -61,6 +60,7 @@ var (
 	NetCustomBindingPlugins              = Label("netCustomBindingPlugins")
 	RequiresTwoSchedulableNodes          = Label("requires-two-schedulable-nodes")
 	RequiresThreeSchedulableNodes        = Label("requires-three-schedulable-nodes")
+	RequiresDedicatedWorkerNodes         = Label("requires-dedicated-worker-nodes")
 	VMLiveUpdateRolloutStrategy          = Label("VMLiveUpdateRolloutStrategy")
 	USB                                  = Label("USB")
 	RequiresTwoWorkerNodesWithCPUManager = Label("requires-two-worker-nodes-with-cpu-manager")
@@ -68,6 +68,7 @@ var (
 	RequiresDualStackCluster             = Label("requires-dual-stack-cluster")
 	RequiresHugepages2Mi                 = Label("requireHugepages2Mi")
 	RequiresHugepages1Gi                 = Label("requireHugepages1Gi")
+	GuestAgentProbes                     = Label("guest-agent-probes")
 
 	/* Storage classes */
 

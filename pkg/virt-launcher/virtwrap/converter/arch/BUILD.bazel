@@ -6,14 +6,12 @@ go_library(
         "amd64.go",
         "arm64.go",
         "converter.go",
-        "ppc64le.go",
         "s390x.go",
     ],
     importpath = "kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap/converter/arch",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/pointer:go_default_library",
-        "//pkg/util:go_default_library",
         "//pkg/virt-launcher/virtwrap/api:go_default_library",
         "//pkg/virt-launcher/virtwrap/device:go_default_library",
         "//pkg/virt-launcher/virtwrap/launchsecurity:go_default_library",
@@ -29,6 +27,7 @@ go_test(
         "converter_test.go",
     ],
     embed = [":go_default_library"],
+    race = "on",
     deps = [
         "//staging/src/kubevirt.io/client-go/testutils:go_default_library",
         "//vendor/github.com/onsi/ginkgo/v2:go_default_library",

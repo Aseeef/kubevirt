@@ -1,3 +1,22 @@
+/*
+ * This file is part of the KubeVirt project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * Copyright The KubeVirt Authors.
+ *
+ */
+
 package container_disk
 
 import (
@@ -375,7 +394,7 @@ func (m *mounter) ContainerDisksReady(vmi *v1.VirtualMachineInstance, notInitial
 		if volume.ContainerDisk != nil {
 			sock, err := m.socketPathGetter(vmi, i)
 			if err == nil {
-				_, err = m.podIsolationDetector.DetectForSocket(vmi, sock)
+				_, err = m.podIsolationDetector.DetectForSocket(sock)
 			}
 
 			if err != nil {
@@ -392,7 +411,7 @@ func (m *mounter) ContainerDisksReady(vmi *v1.VirtualMachineInstance, notInitial
 	if util.HasKernelBootContainerImage(vmi) {
 		sock, err := m.kernelBootSocketPathGetter(vmi)
 		if err == nil {
-			_, err = m.podIsolationDetector.DetectForSocket(vmi, sock)
+			_, err = m.podIsolationDetector.DetectForSocket(sock)
 		}
 		if err != nil {
 			log.DefaultLogger().Object(vmi).Reason(err).Info("kernelboot container not yet ready")
@@ -614,7 +633,7 @@ func (m *mounter) getContainerDiskPath(vmi *v1.VirtualMachineInstance, volume *v
 		return nil, ErrDiskContainerGone
 	}
 
-	res, err := m.podIsolationDetector.DetectForSocket(vmi, sock)
+	res, err := m.podIsolationDetector.DetectForSocket(sock)
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect socket for containerDisk %v: %v", volume.Name, err)
 	}
@@ -633,7 +652,7 @@ func (m *mounter) getKernelArtifactPaths(vmi *v1.VirtualMachineInstance) (*kerne
 		return nil, ErrDiskContainerGone
 	}
 
-	res, err := m.podIsolationDetector.DetectForSocket(vmi, sock)
+	res, err := m.podIsolationDetector.DetectForSocket(sock)
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect socket for kernelboot container: %v", err)
 	}

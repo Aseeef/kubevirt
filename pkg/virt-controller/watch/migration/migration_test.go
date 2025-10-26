@@ -27,6 +27,7 @@ import (
 	"time"
 
 	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
+	"sigs.k8s.io/controller-runtime/pkg/controller/priorityqueue"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -48,6 +49,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 
+	v1 "kubevirt.io/api/core/v1"
 	virtv1 "kubevirt.io/api/core/v1"
 	migrationsv1 "kubevirt.io/api/migrations/v1alpha1"
 	"kubevirt.io/client-go/api"
@@ -227,7 +229,7 @@ var _ = Describe("Migration watcher", func() {
 		virtClientset = kubevirtfake.NewSimpleClientset()
 
 		vmiInformer, _ := testutils.NewFakeInformerFor(&virtv1.VirtualMachineInstance{})
-		migrationInformer, _ := testutils.NewFakeInformerFor(&virtv1.VirtualMachineInstanceMigration{})
+		migrationInformer, _ := testutils.NewFakeInformerWithIndexersFor(&v1.VirtualMachineInstanceMigration{}, virtcontroller.GetVirtualMachineInstanceMigrationInformerIndexers())
 		podInformer, _ := testutils.NewFakeInformerFor(&k8sv1.Pod{})
 		resourceQuotaInformer, _ := testutils.NewFakeInformerFor(&k8sv1.ResourceQuota{})
 		namespaceInformer, _ := testutils.NewFakeInformerFor(&k8sv1.Namespace{})
@@ -2199,17 +2201,88 @@ var _ = Describe("Migration watcher", func() {
 
 			By("Executing the controller and expecting the pending migration to have a low priority")
 			controller.Execute()
+			runningMigrationsFromQueue := make([]string, 0, 5)
 			for i := 0; i < 5; i++ {
 				item, priority, shutdown := controller.Queue.GetWithPriority()
-				Expect(item).To(Equal(fmt.Sprintf("default/testmigration%d", i)))
+				runningMigrationsFromQueue = append(runningMigrationsFromQueue, item)
 				Expect(priority).To(Equal(0))
 				Expect(shutdown).To(BeFalse())
 			}
+			Expect(runningMigrationsFromQueue).To(
+				ConsistOf(
+					"default/testmigration0",
+					"default/testmigration1",
+					"default/testmigration2",
+					"default/testmigration3",
+					"default/testmigration4",
+				),
+			)
 			item, priority, shutdown := controller.Queue.GetWithPriority()
 			Expect(item).To(Equal("default/testmigrationpending"))
-			Expect(priority).To(Equal(-100))
+			Expect(priority).To(Equal(pendingPriority))
 			Expect(shutdown).To(BeFalse())
 		})
+
+		It("existing items should keep low priority after regular Add", func() {
+			controller.Queue.AddWithOpts(priorityqueue.AddOpts{
+				Priority: pendingPriority,
+			}, "default/testmigrationpending")
+
+			// Simulating what we do with informer handler
+			controller.Queue.Add("default/testmigrationpending")
+			item, priority, shutdown := controller.Queue.GetWithPriority()
+			Expect(item).To(Equal("default/testmigrationpending"))
+			Expect(priority).To(BeNumerically("<", activePriority))
+			Expect(shutdown).To(BeFalse())
+		})
+
+		It("new items should have a priority strictly lower than active and higher than pending", func() {
+			controller.Queue.Add("default/testmigrationpending")
+			item, priority, shutdown := controller.Queue.GetWithPriority()
+			Expect(item).To(Equal("default/testmigrationpending"))
+			Expect(priority).To(BeNumerically("<", activePriority))
+			Expect(priority).To(BeNumerically(">", pendingPriority))
+			Expect(shutdown).To(BeFalse())
+		})
+
+		It("should get items in order based on priority", func() {
+			for i := range 5 {
+				controller.Queue.AddWithOpts(priorityqueue.AddOpts{
+					Priority: pendingPriority,
+				}, fmt.Sprintf("default/pending%d", i))
+			}
+			for i := range 5 {
+				controller.Queue.AddWithOpts(priorityqueue.AddOpts{
+					Priority: activePriority,
+				}, fmt.Sprintf("default/active%d", i))
+			}
+			// Add should not change active3's priority
+			controller.Queue.Add("default/active3")
+			// Add should bump pending3 higher than pending but lower than active
+			controller.Queue.Add("default/pending3")
+
+			for i := range 5 {
+				item, priority, shutdown := controller.Queue.GetWithPriority()
+				Expect(item).To(BeEquivalentTo(fmt.Sprintf("default/active%d", i)))
+				Expect(priority).To(Equal(activePriority))
+				Expect(shutdown).To(BeFalse())
+			}
+			item, priority, shutdown := controller.Queue.GetWithPriority()
+			Expect(item).To(BeEquivalentTo("default/pending3"))
+			Expect(priority).To(BeNumerically("<", activePriority))
+			Expect(priority).To(BeNumerically(">", pendingPriority))
+			Expect(shutdown).To(BeFalse())
+			for i := range 5 {
+				if i == 3 {
+					continue
+				}
+				item, priority, shutdown := controller.Queue.GetWithPriority()
+				Expect(item).To(BeEquivalentTo(fmt.Sprintf("default/pending%d", i)))
+				Expect(priority).To(Equal(pendingPriority))
+				Expect(shutdown).To(BeFalse())
+			}
+		})
+
 	})
 })
 
@@ -2308,6 +2381,7 @@ func newSourcePodForVirtualMachine(vmi *virtv1.VirtualMachineInstance) *k8sv1.Po
 			Annotations: map[string]string{
 				virtv1.DomainAnnotation: vmi.Name,
 			},
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(vmi, virtv1.VirtualMachineInstanceGroupVersionKind)},
 		},
 		Status: k8sv1.PodStatus{
 			Phase: k8sv1.PodRunning,
@@ -2336,6 +2410,7 @@ func newTargetPodForVirtualMachine(vmi *virtv1.VirtualMachineInstance, migration
 				virtv1.DomainAnnotation:           vmi.Name,
 				virtv1.MigrationJobNameAnnotation: migration.Name,
 			},
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(vmi, virtv1.VirtualMachineInstanceGroupVersionKind)},
 		},
 		Status: k8sv1.PodStatus{
 			Phase: phase,

@@ -216,3 +216,7 @@ func (config *ClusterConfig) GPUsWithDRAGateEnabled() bool {
 func (config *ClusterConfig) HostDevicesWithDRAEnabled() bool {
 	return config.isFeatureGateEnabled(featuregate.HostDevicesWithDRAGate)
 }
+
+func (config *ClusterConfig) IncrementalBackupEnabled() bool {
+	return config.isFeatureGateEnabled(featuregate.IncrementalBackupGate)
+}

@@ -12838,6 +12838,7 @@
       "type": "string"
      },
      "ppc64le": {
+      "description": "Deprecated: ppc64le architecture is no longer supported.",
       "$ref": "#/definitions/v1.ArchSpecificConfiguration"
      },
      "s390x": {
@@ -13021,6 +13022,33 @@
      "renewBefore": {
       "description": "The amount of time before the currently issued certificate's \"notAfter\" time that we will begin to attempt to renew the certificate.",
       "$ref": "#/definitions/k8s.io.apimachinery.pkg.apis.meta.v1.Duration"
+     }
+    }
+   },
+   "v1.ChangedBlockTrackingSelectors": {
+    "type": "object",
+    "properties": {
+     "namespaceLabelSelector": {
+      "description": "NamespaceSelector will enable changedBlockTracking on all VMs running inside namespaces that match the label selector.",
+      "$ref": "#/definitions/k8s.io.apimachinery.pkg.apis.meta.v1.LabelSelector"
+     },
+     "virtualMachineLabelSelector": {
+      "description": "VirtualMachineSelector will enable changedBlockTracking on all VMs that match the label selector.",
+      "$ref": "#/definitions/k8s.io.apimachinery.pkg.apis.meta.v1.LabelSelector"
+     }
+    }
+   },
+   "v1.ChangedBlockTrackingStatus": {
+    "description": "ChangedBlockTrackingStatus represents the status of ChangedBlockTracking for a VM",
+    "type": "object",
+    "required": [
+     "state"
+    ],
+    "properties": {
+     "state": {
+      "description": "State represents the current CBT state",
+      "type": "string",
+      "default": ""
      }
     }
    },
@@ -13251,20 +13279,18 @@
    "v1.CustomBlockSize": {
     "description": "CustomBlockSize represents the desired logical and physical block size for a VM disk.",
     "type": "object",
-    "required": [
-     "logical",
-     "physical"
-    ],
     "properties": {
+     "discardGranularity": {
+      "type": "integer",
+      "format": "int32"
+     },
      "logical": {
       "type": "integer",
-      "format": "int32",
-      "default": 0
+      "format": "int32"
      },
      "physical": {
       "type": "integer",
-      "format": "int32",
-      "default": 0
+      "format": "int32"
      }
     }
    },
@@ -13744,6 +13770,10 @@
      "cdrom": {
       "description": "Attach a volume as a cdrom to the vmi.",
       "$ref": "#/definitions/v1.CDRomTarget"
+     },
+     "changedBlockTracking": {
+      "description": "ChangedBlockTracking indicates this disk should have CBT option Defaults to false.",
+      "type": "boolean"
      },
      "dedicatedIOThread": {
       "description": "dedicatedIOThread indicates this disk should have an exclusive IO Thread. Enabling this implies useIOThreads = true. Defaults to false.",
@@ -14839,6 +14869,10 @@
       "description": "When set, AutoCPULimitNamespaceLabelSelector will set a CPU limit on virt-launcher for VMIs running inside namespaces that match the label selector. The CPU limit will equal the number of requested vCPUs. This setting does not apply to VMIs with dedicated CPUs.",
       "$ref": "#/definitions/k8s.io.apimachinery.pkg.apis.meta.v1.LabelSelector"
      },
+     "changedBlockTrackingLabelSelectors": {
+      "description": "ChangedBlockTrackingLabelSelectors defines label selectors. VMs matching these selectors will have changed block tracking enabled. Enabling changedBlockTracking is mandatory for performing storage-agnostic backups and incremental backups.",
+      "$ref": "#/definitions/v1.ChangedBlockTrackingSelectors"
+     },
      "commonInstancetypesDeployment": {
       "description": "CommonInstancetypesDeployment controls the deployment of common-instancetypes resources",
       "$ref": "#/definitions/v1.CommonInstancetypesDeployment"
@@ -15223,6 +15257,14 @@
      "sev": {
       "description": "AMD Secure Encrypted Virtualization (SEV).",
       "$ref": "#/definitions/v1.SEV"
+     },
+     "snp": {
+      "description": "AMD SEV-SNP flags defined by the SEV-SNP specifications.",
+      "$ref": "#/definitions/v1.SEVSNP"
+     },
+     "tdx": {
+      "description": "Intel Trust Domain Extensions (TDX).",
+      "$ref": "#/definitions/v1.TDX"
      }
     }
    },
@@ -16273,6 +16315,9 @@
      }
     }
    },
+   "v1.SEVSNP": {
+    "type": "object"
+   },
    "v1.SEVSecretOptions": {
     "description": "SEVSecretOptions is used to provide a secret for a running guest.",
     "type": "object",
@@ -16544,6 +16589,9 @@
       "$ref": "#/definitions/k8s.io.api.core.v1.LocalObjectReference"
      }
     }
+   },
+   "v1.TDX": {
+    "type": "object"
    },
    "v1.TLSConfiguration": {
     "description": "TLSConfiguration holds TLS options",
@@ -18106,6 +18154,10 @@
        "default": ""
       }
      },
+     "changedBlockTracking": {
+      "description": "ChangedBlockTracking represents the status of the changedBlockTracking",
+      "$ref": "#/definitions/v1.ChangedBlockTrackingStatus"
+     },
      "conditions": {
       "description": "Conditions are specific points in VirtualMachineInstance's pod runtime.",
       "type": "array",
@@ -18420,6 +18472,10 @@
     "type": "object",
     "nullable": true,
     "properties": {
+     "changedBlockTracking": {
+      "description": "ChangedBlockTracking represents the status of the changedBlockTracking",
+      "$ref": "#/definitions/v1.ChangedBlockTrackingStatus"
+     },
      "conditions": {
       "description": "Hold the state information of the VirtualMachine and its VirtualMachineInstance",
       "type": "array",
@@ -19361,6 +19417,10 @@
       "description": "ImageStream is the name of image stream for import",
       "type": "string"
      },
+     "platform": {
+      "description": "Platform describes the minimum runtime requirements of the image",
+      "$ref": "#/definitions/v1beta1.PlatformOptions"
+     },
      "pullMethod": {
       "description": "PullMethod can be either \"pod\" (default import), or \"node\" (node docker cache based import)",
       "type": "string"
@@ -19427,6 +19487,10 @@
     "properties": {
      "backingFile": {
       "description": "BackingFile is the path to the virtual hard disk to migrate from vCenter/ESXi",
+      "type": "string"
+     },
+     "extraArgs": {
+      "description": "ExtraArgs is a reference to a ConfigMap containing extra arguments to pass directly to the VDDK library",
       "type": "string"
      },
      "initImageURL": {
@@ -19734,9 +19798,22 @@
      }
     }
    },
+   "v1beta1.PlatformOptions": {
+    "type": "object",
+    "properties": {
+     "architecture": {
+      "description": "Architecture specifies the image target CPU architecture",
+      "type": "string"
+     }
+    }
+   },
    "v1beta1.PreferenceRequirements": {
     "type": "object",
     "properties": {
+     "architecture": {
+      "description": "Required Architecture of the VM referencing this preference",
+      "type": "string"
+     },
      "cpu": {
       "description": "Required CPU related attributes of the instancetype.",
       "$ref": "#/definitions/v1beta1.CPUPreferenceRequirement"
@@ -20468,6 +20545,10 @@
       },
       "x-kubernetes-list-type": "atomic"
      },
+     "ioThreads": {
+      "description": "Optionally specifies the IOThreads options to be used by the instancetype.",
+      "$ref": "#/definitions/v1.DiskIOThreads"
+     },
      "ioThreadsPolicy": {
       "description": "Optionally defines the IOThreadsPolicy to be used by the instancetype.",
       "type": "string"
@@ -20591,6 +20672,10 @@
       "type": "integer",
       "format": "int64"
      },
+     "preferredArchitecture": {
+      "description": "PreferredArchitecture defines a prefeerred architecture for the VirtualMachine",
+      "type": "string"
+     },
      "preferredSubdomain": {
       "description": "Subdomain of the VirtualMachineInstance",
       "type": "string"
@@ -20695,6 +20780,9 @@
      "virtualMachineSnapshotName": {
       "type": "string",
       "default": ""
+     },
+     "volumeOwnershipPolicy": {
+      "type": "string"
      },
      "volumeRestoreOverrides": {
       "description": "VolumeRestoreOverrides gives the option to change properties of each restored volume For example, specifying the name of the restored volume, or adding labels/annotations to it",

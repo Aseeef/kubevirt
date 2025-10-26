@@ -42,7 +42,6 @@ import (
 	storagetypes "kubevirt.io/kubevirt/pkg/storage/types"
 	traceUtils "kubevirt.io/kubevirt/pkg/util/trace"
 	virtconfig "kubevirt.io/kubevirt/pkg/virt-config"
-	"kubevirt.io/kubevirt/pkg/virt-controller/services"
 	"kubevirt.io/kubevirt/pkg/virt-controller/watch/topology"
 	"kubevirt.io/kubevirt/pkg/virt-controller/watch/vsock"
 )
@@ -52,7 +51,7 @@ const (
 	tombstoneGetObjectErrFmt = "couldn't get object from tombstone %+v"
 )
 
-func NewController(templateService services.TemplateService,
+func NewController(templateService templateService,
 	vmiInformer cache.SharedIndexInformer,
 	vmInformer cache.SharedIndexInformer,
 	podInformer cache.SharedIndexInformer,
@@ -71,6 +70,8 @@ func NewController(templateService services.TemplateService,
 	netStatusUpdater statusUpdater,
 	netSpecValidator specValidator,
 	netMigrationEvaluator migrationEvaluator,
+	additionalLauncherAnnotationsSync []string,
+	additionalLauncherLabelsSync []string,
 ) (*Controller, error) {
 
 	c := &Controller{
@@ -79,27 +80,29 @@ func NewController(templateService services.TemplateService,
 			workqueue.DefaultTypedControllerRateLimiter[string](),
 			workqueue.TypedRateLimitingQueueConfig[string]{Name: "virt-controller-vmi"},
 		),
-		vmiIndexer:              vmiInformer.GetIndexer(),
-		vmStore:                 vmInformer.GetStore(),
-		podIndexer:              podInformer.GetIndexer(),
-		pvcIndexer:              pvcInformer.GetIndexer(),
-		migrationIndexer:        migrationInformer.GetIndexer(),
-		recorder:                recorder,
-		clientset:               clientset,
-		podExpectations:         controller.NewUIDTrackingControllerExpectations(controller.NewControllerExpectations()),
-		vmiExpectations:         controller.NewUIDTrackingControllerExpectations(controller.NewControllerExpectations()),
-		pvcExpectations:         controller.NewUIDTrackingControllerExpectations(controller.NewControllerExpectations()),
-		dataVolumeIndexer:       dataVolumeInformer.GetIndexer(),
-		cdiStore:                cdiInformer.GetStore(),
-		cdiConfigStore:          cdiConfigInformer.GetStore(),
-		clusterConfig:           clusterConfig,
-		topologyHinter:          topologyHinter,
-		cidsMap:                 vsock.NewCIDsMap(),
-		backendStorage:          backendstorage.NewBackendStorage(clientset, clusterConfig, storageClassInformer.GetStore(), storageProfileInformer.GetStore(), pvcInformer.GetIndexer()),
-		netAnnotationsGenerator: netAnnotationsGenerator,
-		updateNetworkStatus:     netStatusUpdater,
-		validateNetworkSpec:     netSpecValidator,
-		netMigrationEvaluator:   netMigrationEvaluator,
+		vmiIndexer:                        vmiInformer.GetIndexer(),
+		vmStore:                           vmInformer.GetStore(),
+		podIndexer:                        podInformer.GetIndexer(),
+		pvcIndexer:                        pvcInformer.GetIndexer(),
+		migrationIndexer:                  migrationInformer.GetIndexer(),
+		recorder:                          recorder,
+		clientset:                         clientset,
+		podExpectations:                   controller.NewUIDTrackingControllerExpectations(controller.NewControllerExpectations()),
+		vmiExpectations:                   controller.NewUIDTrackingControllerExpectations(controller.NewControllerExpectations()),
+		pvcExpectations:                   controller.NewUIDTrackingControllerExpectations(controller.NewControllerExpectations()),
+		dataVolumeIndexer:                 dataVolumeInformer.GetIndexer(),
+		cdiStore:                          cdiInformer.GetStore(),
+		cdiConfigStore:                    cdiConfigInformer.GetStore(),
+		clusterConfig:                     clusterConfig,
+		topologyHinter:                    topologyHinter,
+		cidsMap:                           vsock.NewCIDsMap(),
+		backendStorage:                    backendstorage.NewBackendStorage(clientset, clusterConfig, storageClassInformer.GetStore(), storageProfileInformer.GetStore(), pvcInformer.GetIndexer()),
+		netAnnotationsGenerator:           netAnnotationsGenerator,
+		updateNetworkStatus:               netStatusUpdater,
+		validateNetworkSpec:               netSpecValidator,
+		netMigrationEvaluator:             netMigrationEvaluator,
+		additionalLauncherAnnotationsSync: additionalLauncherAnnotationsSync,
+		additionalLauncherLabelsSync:      additionalLauncherLabelsSync,
 	}
 
 	c.hasSynced = func() bool {
@@ -163,6 +166,14 @@ func (i informalSyncError) RequiresRequeue() bool {
 	return false
 }
 
+type templateService interface {
+	RenderLaunchManifest(vmi *virtv1.VirtualMachineInstance) (*k8sv1.Pod, error)
+	RenderLaunchManifestNoVm(*virtv1.VirtualMachineInstance) (*k8sv1.Pod, error)
+	RenderHotplugAttachmentPodTemplate(volumes []*virtv1.Volume, ownerPod *k8sv1.Pod, vmi *virtv1.VirtualMachineInstance, claimMap map[string]*k8sv1.PersistentVolumeClaim) (*k8sv1.Pod, error)
+	RenderHotplugAttachmentTriggerPodTemplate(volume *virtv1.Volume, ownerPod *k8sv1.Pod, vmi *virtv1.VirtualMachineInstance, pvcName string, isBlock, tempPod bool) (*k8sv1.Pod, error)
+	GetLauncherImage() string
+}
+
 type annotationsGenerator interface {
 	GenerateFromActivePod(vmi *virtv1.VirtualMachineInstance, pod *k8sv1.Pod) map[string]string
 }
@@ -182,30 +193,32 @@ type migrationEvaluator interface {
 }
 
 type Controller struct {
-	templateService         services.TemplateService
-	clientset               kubecli.KubevirtClient
-	Queue                   workqueue.TypedRateLimitingInterface[string]
-	vmiIndexer              cache.Indexer
-	vmStore                 cache.Store
-	podIndexer              cache.Indexer
-	pvcIndexer              cache.Indexer
-	migrationIndexer        cache.Indexer
-	topologyHinter          topology.Hinter
-	recorder                record.EventRecorder
-	podExpectations         *controller.UIDTrackingControllerExpectations
-	vmiExpectations         *controller.UIDTrackingControllerExpectations
-	pvcExpectations         *controller.UIDTrackingControllerExpectations
-	dataVolumeIndexer       cache.Indexer
-	cdiStore                cache.Store
-	cdiConfigStore          cache.Store
-	clusterConfig           *virtconfig.ClusterConfig
-	cidsMap                 vsock.Allocator
-	backendStorage          *backendstorage.BackendStorage
-	hasSynced               func() bool
-	netAnnotationsGenerator annotationsGenerator
-	updateNetworkStatus     statusUpdater
-	validateNetworkSpec     specValidator
-	netMigrationEvaluator   migrationEvaluator
+	templateService                   templateService
+	clientset                         kubecli.KubevirtClient
+	Queue                             workqueue.TypedRateLimitingInterface[string]
+	vmiIndexer                        cache.Indexer
+	vmStore                           cache.Store
+	podIndexer                        cache.Indexer
+	pvcIndexer                        cache.Indexer
+	migrationIndexer                  cache.Indexer
+	topologyHinter                    topology.Hinter
+	recorder                          record.EventRecorder
+	podExpectations                   *controller.UIDTrackingControllerExpectations
+	vmiExpectations                   *controller.UIDTrackingControllerExpectations
+	pvcExpectations                   *controller.UIDTrackingControllerExpectations
+	dataVolumeIndexer                 cache.Indexer
+	cdiStore                          cache.Store
+	cdiConfigStore                    cache.Store
+	clusterConfig                     *virtconfig.ClusterConfig
+	cidsMap                           vsock.Allocator
+	backendStorage                    *backendstorage.BackendStorage
+	hasSynced                         func() bool
+	netAnnotationsGenerator           annotationsGenerator
+	updateNetworkStatus               statusUpdater
+	validateNetworkSpec               specValidator
+	netMigrationEvaluator             migrationEvaluator
+	additionalLauncherAnnotationsSync []string
+	additionalLauncherLabelsSync      []string
 }
 
 func (c *Controller) Run(threadiness int, stopCh <-chan struct{}) {
@@ -344,7 +357,7 @@ func (c *Controller) addPod(obj interface{}) {
 		return
 	}
 
-	controllerRef := controller.GetControllerOf(pod)
+	controllerRef := v1.GetControllerOf(pod)
 	vmi := c.resolveControllerRef(pod.Namespace, controllerRef)
 	if vmi == nil {
 		return
@@ -381,8 +394,8 @@ func (c *Controller) updatePod(old, cur interface{}) {
 		return
 	}
 
-	curControllerRef := controller.GetControllerOf(curPod)
-	oldControllerRef := controller.GetControllerOf(oldPod)
+	curControllerRef := v1.GetControllerOf(curPod)
+	oldControllerRef := v1.GetControllerOf(oldPod)
 	controllerRefChanged := !equality.Semantic.DeepEqual(curControllerRef, oldControllerRef)
 	if controllerRefChanged {
 		// The ControllerRef was changed. Sync the old controller, if any.
@@ -421,7 +434,7 @@ func (c *Controller) onPodDelete(obj interface{}) {
 		}
 	}
 
-	controllerRef := controller.GetControllerOf(pod)
+	controllerRef := v1.GetControllerOf(pod)
 	vmi := c.resolveControllerRef(pod.Namespace, controllerRef)
 	if vmi == nil {
 		return
@@ -499,7 +512,7 @@ func (c *Controller) resolveControllerRef(namespace string, controllerRef *v1.Ow
 			return nil
 		}
 		pod, _ := obj.(*k8sv1.Pod)
-		controllerRef = controller.GetControllerOf(pod)
+		controllerRef = v1.GetControllerOf(pod)
 	}
 	// We can't look up by UID, so look up by Name and then verify UID.
 	// Don't even try to look up by Name if it is nil or the wrong Kind.

@@ -68,12 +68,12 @@ import (
 var testHookSidecar = hooks.HookSidecar{Image: "test-image", ImagePullPolicy: "test-policy"}
 
 var _ = Describe("Template", func() {
-	var configFactory func(string) (*virtconfig.ClusterConfig, cache.Store, TemplateService)
+	var configFactory func(string) (*virtconfig.ClusterConfig, cache.Store, *TemplateService)
 	var qemuGid int64 = 107
 	var defaultArch = "amd64"
 
 	pvcCache := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, nil)
-	var svc TemplateService
+	var svc *TemplateService
 
 	var ctrl *gomock.Controller
 	var virtClient *kubecli.MockKubevirtClient
@@ -117,7 +117,7 @@ var _ = Describe("Template", func() {
 	})
 
 	BeforeEach(func() {
-		configFactory = func(cpuArch string) (*virtconfig.ClusterConfig, cache.Store, TemplateService) {
+		configFactory = func(cpuArch string) (*virtconfig.ClusterConfig, cache.Store, *TemplateService) {
 			config, _, kvStore := testutils.NewFakeClusterConfigUsingKVWithCPUArch(kv, cpuArch)
 
 			svc = NewTemplateService("kubevirt/virt-launcher",
@@ -459,9 +459,10 @@ var _ = Describe("Template", func() {
 				Expect(pod.Spec.Containers).To(HaveLen(2))
 				Expect(pod.Spec.Containers[0].Image).To(Equal("kubevirt/virt-launcher"))
 				Expect(pod.ObjectMeta.Labels).To(Equal(map[string]string{
-					v1.AppLabel:                "virt-launcher",
-					v1.CreatedByLabel:          "1234",
-					v1.VirtualMachineNameLabel: "testvmi",
+					v1.AppLabel:                          "virt-launcher",
+					v1.CreatedByLabel:                    "1234",
+					v1.DeprecatedVirtualMachineNameLabel: "testvmi",
+					v1.VirtualMachineInstanceIDLabel:     "testvmi",
 				}))
 				Expect(pod.ObjectMeta.Annotations).To(Equal(map[string]string{
 					v1.DomainAnnotation:                                  "testvmi",
@@ -519,8 +520,24 @@ var _ = Describe("Template", func() {
 			},
 				Entry("on amd64", "amd64", "/usr/share/OVMF"),
 				Entry("on arm64", "arm64", "/usr/share/AAVMF"),
-				Entry("on ppc64le", "ppc64le", "/usr/share/OVMF"),
 			)
+
+			It("Should have a stable label to select virt-launcher pods", func() {
+				const (
+					testNamespace = "test"
+					longVMIName   = "a-very-very-long-virtual-machine-instance-name-used-for-testing-this-logic"
+				)
+
+				pod, err := svc.RenderLaunchManifest(
+					libvmi.New(
+						libvmi.WithNamespace(testNamespace),
+						libvmi.WithName(longVMIName),
+					))
+				Expect(err).NotTo(HaveOccurred())
+
+				const expectedVMIIDLabelValue = "a-very-very-long-virtual-machine-instance-name-used-fo-88ed080c"
+				Expect(pod.ObjectMeta.Labels).To(HaveKeyWithValue(v1.VirtualMachineInstanceIDLabel, expectedVMIIDLabelValue))
+			})
 		})
 		Context("with SELinux types", func() {
 			It("should be nil if no SELinux type is specified and none is needed", func() {
@@ -1056,9 +1073,10 @@ var _ = Describe("Template", func() {
 				Expect(pod.Spec.Containers[0].Image).To(Equal("kubevirt/virt-launcher"))
 
 				Expect(pod.ObjectMeta.Labels).To(Equal(map[string]string{
-					v1.AppLabel:                "virt-launcher",
-					v1.CreatedByLabel:          "1234",
-					v1.VirtualMachineNameLabel: "testvmi",
+					v1.AppLabel:                          "virt-launcher",
+					v1.CreatedByLabel:                    "1234",
+					v1.DeprecatedVirtualMachineNameLabel: "testvmi",
+					v1.VirtualMachineInstanceIDLabel:     "testvmi",
 				}))
 				Expect(pod.ObjectMeta.GenerateName).To(Equal("virt-launcher-testvmi-"))
 				Expect(pod.Spec.NodeSelector).To(Equal(map[string]string{
@@ -1271,7 +1289,18 @@ var _ = Describe("Template", func() {
 					Expect(pod.Spec.NodeSelector).To(HaveKeyWithValue(v1.SEVESLabel, "true"))
 				})
 
-				DescribeTable("should not add SEV-ES node label selector", func(policy *v1.SEVPolicy) {
+				It("should add SEV and SEV-SNP node label selector with SEV-SNP workload", func() {
+					vmi.Spec.Domain.LaunchSecurity = &v1.LaunchSecurity{
+						SNP: &v1.SEVSNP{},
+					}
+
+					pod, err := svc.RenderLaunchManifest(vmi)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(pod.Spec.NodeSelector).To(HaveKeyWithValue(v1.SEVLabel, "true"))
+					Expect(pod.Spec.NodeSelector).To(HaveKeyWithValue(v1.SEVSNPLabel, "true"))
+				})
+
+				DescribeTable("should not add SEV-ES or SEV-SNP node label selector", func(policy *v1.SEVPolicy) {
 					vmi.Spec.Domain.LaunchSecurity = &v1.LaunchSecurity{
 						SEV: &v1.SEV{
 							Policy: policy,
@@ -1280,11 +1309,20 @@ var _ = Describe("Template", func() {
 					pod, err := svc.RenderLaunchManifest(vmi)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(pod.Spec.NodeSelector).To(Not(HaveKey(ContainSubstring(v1.SEVESLabel))))
+					Expect(pod.Spec.NodeSelector).To(Not(HaveKey(ContainSubstring(v1.SEVSNPLabel))))
 				},
 					Entry("when no SEV policy is set", &v1.SEVPolicy{}),
 					Entry("when no SEV-ES policy bit is set", &v1.SEVPolicy{EncryptedState: nil}),
 					Entry("when SEV-ES policy bit is set to false", &v1.SEVPolicy{EncryptedState: pointer.P(false)}),
 				)
+
+				It("should not add SEV-SNP node label selector when no SEV-SNP workload", func() {
+					vmi.Spec.Domain.LaunchSecurity = &v1.LaunchSecurity{}
+
+					pod, err := svc.RenderLaunchManifest(vmi)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(pod.Spec.NodeSelector).To(Not(HaveKey(ContainSubstring(v1.SEVSNPLabel))))
+				})
 			})
 
 			Context("When scheduling Secure Execution workloads", func() {
@@ -1900,11 +1938,12 @@ var _ = Describe("Template", func() {
 
 				Expect(pod.Labels).To(Equal(
 					map[string]string{
-						"key1":                     "val1",
-						"key2":                     "val2",
-						v1.AppLabel:                "virt-launcher",
-						v1.CreatedByLabel:          "1234",
-						v1.VirtualMachineNameLabel: "testvmi",
+						"key1":                               "val1",
+						"key2":                               "val2",
+						v1.AppLabel:                          "virt-launcher",
+						v1.CreatedByLabel:                    "1234",
+						v1.DeprecatedVirtualMachineNameLabel: "testvmi",
+						v1.VirtualMachineInstanceIDLabel:     "testvmi",
 					},
 				))
 			})
@@ -2203,7 +2242,7 @@ var _ = Describe("Template", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().String()).To(Equal("3"))
 			})
-			It("should allocate proportinal amount of cpus to vmipod as vcpus with allocation_ratio set to 10", func() {
+			It("should allocate proportional amount of cpus to vmipod as vcpus with allocation_ratio set to 10", func() {
 				vmi := v1.VirtualMachineInstance{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "testvmi",
@@ -2254,6 +2293,58 @@ var _ = Describe("Template", func() {
 				pod, err := svc.RenderLaunchManifest(&vmi)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(pod.Spec.Containers[0].Resources.Requests.Cpu().String()).To(Equal("150m"))
+			})
+
+			It("should honor memoryOvercommit when set in the CR", func() {
+				config, kvStore, svc = configFactory(defaultArch)
+
+				By("Creating a VMI")
+				vmi := v1.VirtualMachineInstance{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "testvmi",
+						Namespace: "default",
+						UID:       "1234",
+					},
+					Spec: v1.VirtualMachineInstanceSpec{
+						Domain: v1.DomainSpec{
+							Memory: &v1.Memory{
+								Guest: pointer.P(resource.MustParse("1Gi")),
+							},
+							Resources: v1.ResourceRequirements{
+								Requests: k8sv1.ResourceList{
+									// This would usually be set by the mutating webhook
+									k8sv1.ResourceMemory: resource.MustParse("1Gi"),
+								},
+							},
+						},
+					},
+				}
+
+				By("Checking how much memory the pod requests by default")
+				pod, err := svc.RenderLaunchManifest(&vmi)
+				Expect(err).ToNot(HaveOccurred())
+				mem100 := pod.Spec.Containers[0].Resources.Requests.Memory()
+
+				By("Setting a memory overcommit of 110% in the CR")
+				kvConfig := kv.DeepCopy()
+				kvConfig.Spec.Configuration.DeveloperConfiguration.MemoryOvercommit = 110
+				testutils.UpdateFakeKubeVirtClusterConfig(kvStore, kvConfig)
+
+				By("Checking how much memory the pod requests now")
+				pod, err = svc.RenderLaunchManifest(&vmi)
+				Expect(err).ToNot(HaveOccurred())
+				mem110 := pod.Spec.Containers[0].Resources.Requests.Memory()
+
+				By("Ensuring the memory was overcommitted by 110%")
+				overhead := mem100.DeepCopy()
+				overhead.Sub(*vmi.Spec.Domain.Memory.Guest)
+				mem100.Sub(overhead)
+				mem110.Sub(overhead)
+				mem100int, res := mem100.AsInt64()
+				Expect(res).To(BeTrue())
+				mem110int, res := mem110.AsInt64()
+				Expect(res).To(BeTrue())
+				Expect(mem100int * 100 / 110).To(Equal(mem110int))
 			})
 		})
 
@@ -2720,19 +2811,6 @@ var _ = Describe("Template", func() {
 		})
 
 		Context("with sriov interface", func() {
-
-			It("should not run privileged", func() {
-				config, kvStore, svc = configFactory(defaultArch)
-				// For Power we are currently running in privileged mode or libvirt will fail to lock memory
-				if svc.IsPPC64() {
-					Skip("ppc64le is currently running is privileged mode, so skipping test")
-				}
-				pod, err := svc.RenderLaunchManifest(newVMIWithSriovInterface("testvmi", "1234"))
-				Expect(err).ToNot(HaveOccurred())
-
-				Expect(pod.Spec.Containers).To(HaveLen(1))
-				Expect(*pod.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
-			})
 
 			It("should not mount pci related host directories", func() {
 				config, kvStore, svc = configFactory(defaultArch)
@@ -3325,38 +3403,6 @@ var _ = Describe("Template", func() {
 		})
 
 		Context("with GPU device interface", func() {
-			It("should not run privileged", func() {
-				config, kvStore, svc = configFactory(defaultArch)
-				// For Power we are currently running in privileged mode or libvirt will fail to lock memory
-				if svc.IsPPC64() {
-					Skip("ppc64le is currently running is privileged mode, so skipping test")
-				}
-				vmi := v1.VirtualMachineInstance{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "testvmi",
-						Namespace: "default",
-						UID:       "1234",
-					},
-					Spec: v1.VirtualMachineInstanceSpec{
-						Domain: v1.DomainSpec{
-							Devices: v1.Devices{
-								DisableHotplug: true,
-								GPUs: []v1.GPU{
-									{
-										Name:       "gpu1",
-										DeviceName: "vendor.com/gpu_name",
-									},
-								},
-							},
-						},
-					},
-				}
-				pod, err := svc.RenderLaunchManifest(&vmi)
-				Expect(err).ToNot(HaveOccurred())
-
-				Expect(pod.Spec.Containers).To(HaveLen(1))
-				Expect(*pod.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
-			})
 			It("should not mount pci related host directories and should have gpu resource", func() {
 				config, kvStore, svc = configFactory(defaultArch)
 				vmi := v1.VirtualMachineInstance{
@@ -3402,38 +3448,6 @@ var _ = Describe("Template", func() {
 		})
 
 		Context("with HostDevice device interface", func() {
-			It("should not run privileged", func() {
-				config, kvStore, svc = configFactory(defaultArch)
-				// For Power we are currently running in privileged mode or libvirt will fail to lock memory
-				if svc.IsPPC64() {
-					Skip("ppc64le is currently running is privileged mode, so skipping test")
-				}
-				vmi := v1.VirtualMachineInstance{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "testvmi",
-						Namespace: "default",
-						UID:       "1234",
-					},
-					Spec: v1.VirtualMachineInstanceSpec{
-						Domain: v1.DomainSpec{
-							Devices: v1.Devices{
-								DisableHotplug: true,
-								HostDevices: []v1.HostDevice{
-									{
-										Name:       "hostdev1",
-										DeviceName: "vendor.com/dev_name",
-									},
-								},
-							},
-						},
-					},
-				}
-				pod, err := svc.RenderLaunchManifest(&vmi)
-				Expect(err).ToNot(HaveOccurred())
-
-				Expect(pod.Spec.Containers).To(HaveLen(1))
-				Expect(*pod.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
-			})
 			It("should not mount pci related host directories", func() {
 				config, kvStore, svc = configFactory(defaultArch)
 				vmi := v1.VirtualMachineInstance{
@@ -4078,22 +4092,6 @@ var _ = Describe("Template", func() {
 				RunAsNonRoot: pointer.P(true),
 				FSGroup:      &nonRootUser,
 			}),
-			Entry("on a passt vmi", func() *v1.VirtualMachineInstance {
-				nonRootUser := util.NonRootUID
-				vmi := api.NewMinimalVMI("fake-vmi")
-				vmi.Status.RuntimeUser = uint64(nonRootUser)
-				vmi.Spec.Domain.Devices.Interfaces = []v1.Interface{{
-					InterfaceBindingMethod: v1.InterfaceBindingMethod{
-						DeprecatedPasst: &v1.DeprecatedInterfacePasst{},
-					},
-				}}
-				return vmi
-			}, &k8sv1.PodSecurityContext{
-				RunAsUser:    &nonRootUser,
-				RunAsGroup:   &nonRootUser,
-				RunAsNonRoot: pointer.P(true),
-				FSGroup:      &nonRootUser,
-			}),
 			Entry("on a virtiofs vmi", func() *v1.VirtualMachineInstance {
 				nonRootUser := util.NonRootUID
 				vmi := api.NewMinimalVMI("fake-vmi")
@@ -4405,14 +4403,14 @@ var _ = Describe("Template", func() {
 						Namespace: "default",
 						UID:       "1234",
 						Labels: map[string]string{
-							v1.VirtualMachineNameLabel: "random_name",
+							v1.DeprecatedVirtualMachineNameLabel: "random_name",
 						},
 					},
 				}
 
 				pod, err := svc.RenderLaunchManifest(&vmi)
 				Expect(err).ToNot(HaveOccurred())
-				vmNameLabel, ok := pod.Labels[v1.VirtualMachineNameLabel]
+				vmNameLabel, ok := pod.Labels[v1.DeprecatedVirtualMachineNameLabel]
 				Expect(ok).To(BeTrue())
 				Expect(vmNameLabel).To(Equal(vmi.Name))
 			})
@@ -4433,7 +4431,7 @@ var _ = Describe("Template", func() {
 					pod, err := svc.RenderLaunchManifest(&vmi)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(pod.Spec.Containers).To(HaveLen(1))
-					vmNameLabel, ok := pod.Labels[v1.VirtualMachineNameLabel]
+					vmNameLabel, ok := pod.Labels[v1.DeprecatedVirtualMachineNameLabel]
 					Expect(ok).To(BeTrue())
 					Expect(vmNameLabel).To(Equal(vmi.Name))
 				})
@@ -4455,7 +4453,7 @@ var _ = Describe("Template", func() {
 					pod, err := svc.RenderLaunchManifest(&vmi)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(pod.Spec.Containers).To(HaveLen(1))
-					vmNameLabel, ok := pod.Labels[v1.VirtualMachineNameLabel]
+					vmNameLabel, ok := pod.Labels[v1.DeprecatedVirtualMachineNameLabel]
 					Expect(ok).To(BeTrue())
 					Expect(vmNameLabel).To(Equal(name[:validation.DNS1123LabelMaxLength]))
 				})
@@ -4849,57 +4847,6 @@ var _ = Describe("Template", func() {
 			Expect(*pod.Spec.AutomountServiceAccountToken).To(BeFalse(), "Token automount is disabled")
 		})
 
-	})
-
-	Context("AMD SEV LaunchSecurity", func() {
-		It("should not run privileged with SEV device resource", func() {
-			vmi := v1.VirtualMachineInstance{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "testvmi",
-					Namespace: "namespace",
-					UID:       "1234",
-				},
-				Spec: v1.VirtualMachineInstanceSpec{
-					Domain: v1.DomainSpec{
-						LaunchSecurity: &v1.LaunchSecurity{
-							SEV: &v1.SEV{},
-						},
-					},
-				},
-			}
-			pod, err := svc.RenderLaunchManifest(&vmi)
-			Expect(err).ToNot(HaveOccurred())
-
-			Expect(pod.Spec.Containers).To(HaveLen(1))
-			Expect(*pod.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
-
-			sev, ok := pod.Spec.Containers[0].Resources.Limits[SevDevice]
-			Expect(ok).To(BeTrue())
-			Expect(int(sev.Value())).To(Equal(1))
-		})
-	})
-
-	Context("Secure Execution LaunchSecurity", func() {
-		It("should not run privileged with Secure Execution", func() {
-			vmi := v1.VirtualMachineInstance{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "testvmi",
-					Namespace: "namespace",
-					UID:       "1234",
-				},
-				Spec: v1.VirtualMachineInstanceSpec{
-					Architecture: "s390x",
-					Domain: v1.DomainSpec{
-						LaunchSecurity: &v1.LaunchSecurity{},
-					},
-				},
-			}
-			pod, err := svc.RenderLaunchManifest(&vmi)
-			Expect(err).ToNot(HaveOccurred())
-
-			Expect(pod.Spec.Containers).To(HaveLen(1))
-			Expect(*pod.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
-		})
 	})
 
 	Context("with VSOCK enabled", func() {
@@ -5333,8 +5280,9 @@ var _ = Describe("Template", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pod).ToNot(BeNil())
 			containGCL := ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
-				"Name":          Equal("guest-console-log"),
-				"RestartPolicy": Equal(pointer.P(k8sv1.ContainerRestartPolicyAlways)),
+				"Name":            Equal("guest-console-log"),
+				"RestartPolicy":   Equal(pointer.P(k8sv1.ContainerRestartPolicyAlways)),
+				"ImagePullPolicy": Equal(config.GetImagePullPolicy()),
 			}))
 			if expected {
 				Expect(pod.Spec.InitContainers).To(containGCL)
