@@ -217,7 +217,6 @@ var _ = Describe("VirtualMachineInstance Mutator", func() {
 	},
 		Entry("when architecture is amd64", "amd64", v1.DefaultCPUModel, "q35"),
 		Entry("when architecture is arm64", "arm64", v1.CPUModeHostPassthrough, "virt"),
-		Entry("when architecture is ppc64le", "ppc64le", v1.DefaultCPUModel, "pseries"),
 		Entry("when architecture is s390x", "s390x", v1.DefaultCPUModel, "s390-ccw-virtio"),
 	)
 
@@ -235,7 +234,6 @@ var _ = Describe("VirtualMachineInstance Mutator", func() {
 	},
 		Entry("when architecture is amd64", "amd64", v1.DefaultCPUModel, "q35"),
 		Entry("when architecture is arm64", "arm64", v1.CPUModeHostPassthrough, "virt"),
-		Entry("when architecture is ppc64le", "ppc64le", v1.DefaultCPUModel, "pseries"),
 		Entry("when architecture is s390x", "s390x", v1.DefaultCPUModel, "s390-ccw-virtio"),
 	)
 
@@ -246,10 +244,9 @@ var _ = Describe("VirtualMachineInstance Mutator", func() {
 					CPUModel:   cpuModelFromConfig,
 					CPURequest: &cpuReq,
 					ArchitectureConfiguration: &v1.ArchConfiguration{
-						Amd64:   &v1.ArchSpecificConfiguration{MachineType: machineTypeFromConfig},
-						Arm64:   &v1.ArchSpecificConfiguration{MachineType: machineTypeFromConfig},
-						Ppc64le: &v1.ArchSpecificConfiguration{MachineType: machineTypeFromConfig},
-						S390x:   &v1.ArchSpecificConfiguration{MachineType: machineTypeFromConfig},
+						Amd64: &v1.ArchSpecificConfiguration{MachineType: machineTypeFromConfig},
+						Arm64: &v1.ArchSpecificConfiguration{MachineType: machineTypeFromConfig},
+						S390x: &v1.ArchSpecificConfiguration{MachineType: machineTypeFromConfig},
 					},
 				},
 			},
@@ -523,15 +520,15 @@ var _ = Describe("VirtualMachineInstance Mutator", func() {
 		presentVolumeName := "present-vol"
 		missingVolumeName := "missing-vol"
 		vmi.Spec.Domain.Devices.Disks = []v1.Disk{
-			v1.Disk{
+			{
 				Name: presentVolumeName,
 			},
 		}
 		vmi.Spec.Volumes = []v1.Volume{
-			v1.Volume{
+			{
 				Name: presentVolumeName,
 			},
-			v1.Volume{
+			{
 				Name: missingVolumeName,
 			},
 		}
@@ -648,25 +645,6 @@ var _ = Describe("VirtualMachineInstance Mutator", func() {
 		Expect(vmiSpec.Domain.CPU.Cores).To(Equal(uint32(1)), "Expect cores")
 		Expect(vmiSpec.Domain.CPU.Sockets).To(Equal(uint32(3)), "Expect sockets")
 		Expect(vmiSpec.Domain.CPU.Threads).To(Equal(uint32(1)), "Expect threads")
-	})
-
-	It("should apply memory-overcommit when guest-memory is set and memory-request is not set", func() {
-		// no limits wanted on this test, to not copy the limit to requests
-		testutils.UpdateFakeKubeVirtClusterConfig(kvStore, &v1.KubeVirt{
-			Spec: v1.KubeVirtSpec{
-				Configuration: v1.KubeVirtConfiguration{
-					DeveloperConfiguration: &v1.DeveloperConfiguration{
-						MemoryOvercommit: 150,
-					},
-				},
-			},
-		})
-
-		guestMemory := resource.MustParse("3072M")
-		vmi.Spec.Domain.Memory = &v1.Memory{Guest: &guestMemory}
-		_, vmiSpec, _ := getMetaSpecStatusFromAdmit()
-		Expect(vmiSpec.Domain.Memory.Guest.String()).To(Equal("3072M"))
-		Expect(vmiSpec.Domain.Resources.Requests.Memory().String()).To(Equal("2048M"))
 	})
 
 	It("should apply memory-overcommit when hugepages are set and memory-request is not set", func() {

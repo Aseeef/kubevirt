@@ -52,7 +52,11 @@ const (
 	DisableMediatedDevicesHandling = "DisableMDEVConfiguration"
 	// PersistentReservation enables the use of the SCSI persistent reservation with the pr-helper daemon
 	PersistentReservation = "PersistentReservation"
-	// VMPersistentState enables persisting backend state files of VMs, such as the contents of the vTPM
+
+	// Owner: sig-compute / @lyarwood
+	// Alpha: v1.0.0
+	//
+	// MultiArchitecture allows VM/VMIs to request and schedule to an architecture other than that of control plane
 	MultiArchitecture = "MultiArchitecture"
 
 	// AlignCPUsGate allows emulator thread to assign two extra CPUs if needed to complete even parity.
@@ -74,6 +78,14 @@ const (
 	// the need for an extra container for containerDisk, improving security by avoiding
 	// bind mounts in virt-handler.
 	ImageVolume = "ImageVolume"
+
+	// Owner: @shellyka13
+	// Alpha: v1.6.0
+	//
+	// IncrementalBackup feature gate enables creating full and incremental backups for virtual machines.
+	// These backups leverage libvirt's native backup capabilities, providing a storage-agnostic solution.
+	// To support incremental backups, a QCOW2 overlay must be created on top of the VM's raw disk image.
+	IncrementalBackupGate = "IncrementalBackup"
 
 	VirtIOFSConfigVolumesGate = "EnableVirtioFsConfigVolumes"
 	VirtIOFSStorageVolumeGate = "EnableVirtioFsStorageVolumes"
@@ -118,6 +130,8 @@ const (
 
 	// Owner: @varunrsekar
 	// Alpha: v1.6.0
+	// Beta: v1.7.0
+	//
 	// PanicDevices allows defining panic devices for signaling crashes in the guest for a VirtualMachineInstance.
 	PanicDevicesGate = "PanicDevices"
 
@@ -157,6 +171,7 @@ func init() {
 	RegisterFeatureGate(FeatureGate{Name: DecentralizedLiveMigration, State: Alpha})
 	RegisterFeatureGate(FeatureGate{Name: DeclarativeHotplugVolumesGate, State: Alpha})
 	RegisterFeatureGate(FeatureGate{Name: VideoConfig, State: Alpha})
-	RegisterFeatureGate(FeatureGate{Name: PanicDevicesGate, State: Alpha})
+	RegisterFeatureGate(FeatureGate{Name: PanicDevicesGate, State: Beta})
 	RegisterFeatureGate(FeatureGate{Name: PasstIPStackMigration, State: Alpha})
+	RegisterFeatureGate(FeatureGate{Name: IncrementalBackupGate, State: Alpha})
 }

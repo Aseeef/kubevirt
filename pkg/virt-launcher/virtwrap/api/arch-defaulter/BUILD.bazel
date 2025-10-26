@@ -6,7 +6,6 @@ go_library(
         "amd64.go",
         "archdefaults.go",
         "arm64.go",
-        "ppc64le.go",
         "s390x.go",
     ],
     importpath = "kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap/api/arch-defaulter",
@@ -21,6 +20,7 @@ go_test(
         "archdefaults_test.go",
     ],
     embed = [":go_default_library"],
+    race = "on",
     deps = [
         "//vendor/github.com/onsi/ginkgo/v2:go_default_library",
         "//vendor/github.com/onsi/gomega:go_default_library",

@@ -38,6 +38,7 @@ import (
 	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"kubevirt.io/kubevirt/pkg/libdv"
 	"kubevirt.io/kubevirt/pkg/libvmi"
@@ -178,7 +179,7 @@ var _ = Describe(SIG("Live Migration across namespaces", decorators.RequiresDece
 
 	Context("container disk", func() {
 
-		It("[QUARANTINE] should live migrate a container disk vm, several times", decorators.Quarantine, func() {
+		It("should live migrate a container disk vm, several times", func() {
 			var targetVM *virtv1.VirtualMachine
 
 			sourceVMI := libvmifact.NewCirros(
@@ -226,7 +227,7 @@ var _ = Describe(SIG("Live Migration across namespaces", decorators.RequiresDece
 			}
 		})
 
-		It("[QUARANTINE] should live migrate a container disk vm, with an additional PVC mounted, should stay mounted after migration", decorators.Quarantine, func() {
+		It("should live migrate a container disk vm, with an additional PVC mounted, should stay mounted after migration", func() {
 			migrationID := fmt.Sprintf("mig-%s", rand.String(5))
 			sourceDV := libdv.NewDataVolume(
 				libdv.WithBlankImageSource(),
@@ -472,13 +473,13 @@ var _ = Describe(SIG("Live Migration across namespaces", decorators.RequiresDece
 				// Not sealing against a set of PCRs, out of scope here, but should work with a carefully selected set (at least PCR1 was seen changing across reboots)
 				Expect(console.SafeExpectBatch(vmi, []expect.Batcher{
 					&expect.BSnd{S: "tpm2_createprimary -Q --hierarchy=o --key-context=prim.ctx\n"},
-					&expect.BExp{R: console.PromptExpression},
+					&expect.BExp{R: ""},
 					&expect.BSnd{S: "echo MYSECRET | tpm2_create --hash-algorithm=sha256 --public=seal.pub --private=seal.priv --sealing-input=- --parent-context=prim.ctx\n"},
-					&expect.BExp{R: console.PromptExpression},
+					&expect.BExp{R: ""},
 					&expect.BSnd{S: "tpm2_load -Q --parent-context=prim.ctx --public=seal.pub --private=seal.priv --name=seal.name --key-context=seal.ctx\n"},
-					&expect.BExp{R: console.PromptExpression},
+					&expect.BExp{R: ""},
 					&expect.BSnd{S: "tpm2_evictcontrol --hierarchy=o --object-context=seal.ctx 0x81010002\n"},
-					&expect.BExp{R: console.PromptExpression},
+					&expect.BExp{R: ""},
 				}, 300)).To(Succeed(), "failed to store secret into the TPM")
 				checkTPM(vmi)
 			}
@@ -560,6 +561,75 @@ var _ = Describe(SIG("Live Migration across namespaces", decorators.RequiresDece
 				checkEFI(targetVMI)
 			})
 		})
+
+		DescribeTable("should be able to cancel a migration by deleting the migration resource", decorators.SigStorage, func(deleteSource bool) {
+			const timeout = 180
+			migrationID := fmt.Sprintf("mig-%s", rand.String(5))
+			sourceVMI := libvmifact.NewCirros(
+				libvmi.WithNamespace(testsuite.NamespaceTestDefault),
+				libvmi.WithInterface(libvmi.InterfaceDeviceWithMasqueradeBinding()),
+				libvmi.WithNetwork(v1.DefaultPodNetwork()),
+			)
+			targetVMI := sourceVMI.DeepCopy()
+			targetVMI.Namespace = testsuite.NamespaceTestAlternative
+
+			By("limiting the bandwidth of migrations in the test namespace")
+			CreateMigrationPolicy(virtClient, PreparePolicyAndVMIWithBandwidthLimitation(sourceVMI, resource.MustParse("1Ki")))
+
+			By("starting the VirtualMachine")
+			createAndStartVMFromVMISpec(sourceVMI)
+			By("creating a receiver VM")
+			createReceiverVMFromVMISpec(targetVMI)
+			By("creating the migration")
+			sourceMigration := libmigration.NewSource(sourceVMI.Name, sourceVMI.Namespace, migrationID, connectionURL)
+			targetMigration := libmigration.NewTarget(targetVMI.Name, targetVMI.Namespace, migrationID)
+
+			By("starting a migration")
+			sourceMigration = libmigration.RunMigration(virtClient, sourceMigration)
+			targetMigration = libmigration.RunMigration(virtClient, targetMigration)
+			migrationToDelete := sourceMigration
+			if !deleteSource {
+				migrationToDelete = targetMigration
+			}
+
+			By("waiting until the migration is Running")
+			Eventually(func() bool {
+				sourceMigration, err := virtClient.VirtualMachineInstanceMigration(sourceMigration.Namespace).Get(context.Background(), sourceMigration.Name, metav1.GetOptions{})
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(sourceMigration.Status.Phase).ToNot(Equal(v1.MigrationFailed))
+				if sourceMigration.Status.Phase == v1.MigrationRunning {
+					sourceVMI, err = virtClient.VirtualMachineInstance(sourceVMI.Namespace).Get(context.Background(), sourceVMI.Name, metav1.GetOptions{})
+					Expect(err).ToNot(HaveOccurred())
+					if sourceVMI.Status.MigrationState.Completed != true {
+						return true
+					}
+				}
+				return false
+			}).WithTimeout(timeout * time.Second).WithPolling(500 * time.Millisecond).Should(BeTrue())
+
+			By("cancelling a migration")
+			Expect(virtClient.VirtualMachineInstanceMigration(migrationToDelete.Namespace).Delete(context.Background(), migrationToDelete.Name, metav1.DeleteOptions{})).To(Succeed())
+
+			By("checking VMI, confirm migration state")
+			libmigration.ConfirmVMIPostMigrationAborted(sourceVMI, string(sourceMigration.UID), timeout)
+
+			By("Waiting for the source migration object to disappear")
+			libwait.WaitForMigrationToDisappearWithTimeout(sourceMigration, timeout)
+			By("Waiting for the target migration object to disappear")
+			libwait.WaitForMigrationToDisappearWithTimeout(targetMigration, timeout)
+			By("Logging in and ensuring the source VM is still running")
+			Expect(console.LoginToCirros(sourceVMI)).To(Succeed())
+			By("Checking that the receiving VM is in WaitingAsReceiver phase")
+			Eventually(func() virtv1.VirtualMachineInstancePhase {
+				targetVMI, err := virtClient.VirtualMachineInstance(targetVMI.Namespace).Get(context.Background(), targetVMI.Name, metav1.GetOptions{})
+				Expect(err).ToNot(HaveOccurred())
+				return targetVMI.Status.Phase
+			}).WithTimeout(time.Minute).WithPolling(2 * time.Second).Should(Equal(virtv1.WaitingForSync))
+		},
+			Entry("delete source migration", true),
+			Entry("delete target migration", false),
+		)
 	})
 
 	Context("datavolume disk", func() {
@@ -577,7 +647,7 @@ var _ = Describe(SIG("Live Migration across namespaces", decorators.RequiresDece
 			return targetDV
 		}
 
-		It("[QUARANTINE] should live migrate regular disk several times", decorators.Quarantine, func() {
+		It("should live migrate regular disk several times", func() {
 			var targetVM *virtv1.VirtualMachine
 			sourceDV := libdv.NewDataVolume(
 				libdv.WithRegistryURLSourceAndPullMethod(cd.DataVolumeImportUrlForContainerDisk(cd.ContainerDiskAlpine), cdiv1.RegistryPullNode),

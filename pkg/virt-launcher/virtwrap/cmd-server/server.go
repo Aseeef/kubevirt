@@ -405,7 +405,7 @@ func (l *Launcher) HotplugHostDevices(_ context.Context, request *cmdv1.VMIReque
 	}
 
 	if err := l.domainManager.HotplugHostDevices(vmi); err != nil {
-		log.Log.Object(vmi).Errorf(err.Error())
+		log.Log.Object(vmi).Errorf("%s", err.Error())
 		response.Success = false
 		response.Message = getErrorMessage(err)
 		return response, nil
@@ -781,6 +781,28 @@ func (l *Launcher) SyncVirtualMachineMemory(_ context.Context, request *cmdv1.VM
 
 	log.Log.Object(vmi).Info("guest memory has been updated")
 	return response, nil
+}
+
+func (l *Launcher) GetScreenshot(_ context.Context, request *cmdv1.VMIRequest) (*cmdv1.ScreenshotResponse, error) {
+	vmi, response := getVMIFromRequest(request.Vmi)
+	screenshotResponse := &cmdv1.ScreenshotResponse{
+		Response: response,
+	}
+
+	if !screenshotResponse.Response.Success {
+		return screenshotResponse, nil
+	}
+
+	domainScreenshot, err := l.domainManager.GetScreenshot(vmi)
+	if err != nil {
+		log.Log.Object(vmi).Reason(err).Errorf("Failed to screenshot")
+		screenshotResponse.Response.Success = false
+		screenshotResponse.Response.Message = getErrorMessage(err)
+		return screenshotResponse, nil
+	}
+	screenshotResponse.Mime = domainScreenshot.Mime
+	screenshotResponse.Data = domainScreenshot.Data
+	return screenshotResponse, nil
 }
 
 func ReceivedEarlyExitSignal() bool {

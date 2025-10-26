@@ -55,9 +55,12 @@ var _ = Describe(SIG("Slirp", decorators.Networking, decorators.NetCustomBinding
 	BeforeEach(func() {
 		const slirpSidecarImage = "registry:5000/kubevirt/network-slirp-binding:devel"
 
-		Expect(config.WithNetBindingPlugin(slirpBindingName, v1.InterfaceBindingPlugin{
-			SidecarImage: slirpSidecarImage,
-		})).To(Succeed())
+		err := config.RegisterKubevirtConfigChange(
+			config.WithNetBindingPluginIfNotPresent(slirpBindingName, v1.InterfaceBindingPlugin{
+				SidecarImage: slirpSidecarImage,
+			}),
+		)
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("VMI with SLIRP interface, custom mac and port is configured correctly", func() {
@@ -147,7 +150,7 @@ func generateHelloWorldServer(vmi *v1.VirtualMachineInstance, testPort int, prot
 	}
 	Expect(console.SafeExpectBatch(vmi, []expect.Batcher{
 		&expect.BSnd{S: serverCommand},
-		&expect.BExp{R: console.PromptExpression},
+		&expect.BExp{R: ""},
 		&expect.BSnd{S: console.EchoLastReturnValue},
 		&expect.BExp{R: console.RetValue("0")},
 	}, 60)).To(Succeed())

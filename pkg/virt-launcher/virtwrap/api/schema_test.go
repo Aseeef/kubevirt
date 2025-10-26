@@ -38,10 +38,6 @@ var (
 	exampleXML                   string
 	exampleXMLwithNoneMemballoon string
 
-	//go:embed testdata/domain_ppc64le.xml.tmpl
-	exampleXMLppc64le                   string
-	exampleXMLppc64lewithNoneMemballoon string
-
 	//go:embed testdata/domain_arm64.xml.tmpl
 	exampleXMLarm64                   string
 	exampleXMLarm64withNoneMemballoon string
@@ -72,9 +68,6 @@ var _ = ginkgo.Describe("Schema", func() {
 
 	exampleXMLwithNoneMemballoon = templateToString(exampleXML, argNoMemBalloon)
 	exampleXML = templateToString(exampleXML, argMemBalloonVirtio)
-
-	exampleXMLppc64lewithNoneMemballoon = templateToString(exampleXMLppc64le, argNoMemBalloon)
-	exampleXMLppc64le = templateToString(exampleXMLppc64le, argMemBalloonVirtio)
 
 	exampleXMLarm64withNoneMemballoon = templateToString(exampleXMLarm64, argNoMemBalloon)
 	exampleXMLarm64 = templateToString(exampleXMLarm64, argMemBalloonVirtio)
@@ -231,14 +224,12 @@ var _ = ginkgo.Describe("Schema", func() {
 		ginkgo.DescribeTable("Unmarshal into struct", func(arch string, domainStr string) {
 			unmarshalTest(arch, domainStr, exampleDomain)
 		},
-			ginkgo.Entry("for ppc64le", "ppc64le", exampleXMLppc64le),
 			ginkgo.Entry("for arm64", "arm64", exampleXMLarm64),
 			ginkgo.Entry("for amd64", "amd64", exampleXML),
 		)
 		ginkgo.DescribeTable("Marshal into xml", func(arch string, domainStr string) {
 			marshalTest(arch, domainStr, exampleDomain)
 		},
-			ginkgo.Entry("for ppc64le", "ppc64le", exampleXMLppc64le),
 			ginkgo.Entry("for arm64", "arm64", exampleXMLarm64),
 			ginkgo.Entry("for amd64", "amd64", exampleXML),
 		)
@@ -246,14 +237,12 @@ var _ = ginkgo.Describe("Schema", func() {
 		ginkgo.DescribeTable("Unmarshal into struct", func(arch string, domainStr string) {
 			unmarshalTest(arch, domainStr, exampleDomainWithMemballonDevice)
 		},
-			ginkgo.Entry("for ppc64le and Memballoon device is specified", "ppc64le", exampleXMLppc64lewithNoneMemballoon),
 			ginkgo.Entry("for arm64 and Memballoon device is specified", "arm64", exampleXMLarm64withNoneMemballoon),
 			ginkgo.Entry("for amd64 and Memballoon device is specified", "amd64", exampleXMLwithNoneMemballoon),
 		)
 		ginkgo.DescribeTable("Marshal into xml", func(arch string, domainStr string) {
 			marshalTest(arch, domainStr, exampleDomainWithMemballonDevice)
 		},
-			ginkgo.Entry("for ppc64le and Memballoon device is specified", "ppc64le", exampleXMLppc64lewithNoneMemballoon),
 			ginkgo.Entry("for arm64 and Memballoon device is specified", "arm64", exampleXMLarm64withNoneMemballoon),
 			ginkgo.Entry("for amd64 and Memballoon device is specified", "amd64", exampleXMLwithNoneMemballoon),
 		)
@@ -404,5 +393,144 @@ var _ = ginkgo.Describe("JSON marshal of the alias of a domain device", func() {
 		Expect(json.Unmarshal(jsonBytes, newAlias)).To(Succeed())
 		Expect(newAlias.GetName()).To(Equal(testAliasName))
 		Expect(newAlias.IsUserDefined()).To(BeTrue())
+	})
+})
+
+var _ = ginkgo.Describe("LaunchSecurity SEV-SNP", func() {
+	ginkgo.Context("LaunchSecurity round-trip", func() {
+		ginkgo.It("should round-trip SEV-SNP launch security with all fields", func() {
+			launchSecurity := &LaunchSecurity{
+				Type:            "sev-snp",
+				Policy:          "0x30000",
+				Cbitpos:         "51",
+				ReducedPhysBits: "1",
+			}
+
+			xmlBytes, err := xml.Marshal(launchSecurity)
+			Expect(err).ToNot(HaveOccurred())
+
+			var unmarshalled LaunchSecurity
+			err = xml.Unmarshal(xmlBytes, &unmarshalled)
+			Expect(err).ToNot(HaveOccurred())
+
+			expectedLaunchSecurity := LaunchSecurity{
+				Type:            "sev-snp",
+				Policy:          "0x30000",
+				Cbitpos:         "51",
+				ReducedPhysBits: "1",
+			}
+			Expect(unmarshalled).To(Equal(expectedLaunchSecurity))
+		})
+
+		ginkgo.It("should round-trip SEV-SNP launch security with minimal fields", func() {
+			launchSecurity := &LaunchSecurity{
+				Type:   "sev-snp",
+				Policy: "0x30000",
+			}
+
+			xmlBytes, err := xml.Marshal(launchSecurity)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Verify minimal XML format
+			expectedXML := `<LaunchSecurity type="sev-snp"><policy>0x30000</policy></LaunchSecurity>`
+			Expect(string(xmlBytes)).To(Equal(expectedXML))
+
+			var unmarshalled LaunchSecurity
+			err = xml.Unmarshal(xmlBytes, &unmarshalled)
+			Expect(err).ToNot(HaveOccurred())
+
+			expectedLaunchSecurity := LaunchSecurity{
+				Type:   "sev-snp",
+				Policy: "0x30000",
+			}
+			Expect(unmarshalled).To(Equal(expectedLaunchSecurity))
+		})
+
+		ginkgo.It("should round-trip SEV vs SEV-SNP configurations", func() {
+			sevConfig := &LaunchSecurity{
+				Type:    "sev",
+				Policy:  "0x0001",
+				DHCert:  "test-dh-cert",
+				Session: "test-session",
+			}
+
+			snpConfig := &LaunchSecurity{
+				Type:   "sev-snp",
+				Policy: "0x30000",
+			}
+
+			// Test SEV round-trip
+			sevXML, err := xml.Marshal(sevConfig)
+			Expect(err).ToNot(HaveOccurred())
+			var sevUnmarshalled LaunchSecurity
+			Expect(xml.Unmarshal(sevXML, &sevUnmarshalled)).To(Succeed())
+			sevExpected := LaunchSecurity{
+				Type:    "sev",
+				Policy:  "0x0001",
+				DHCert:  "test-dh-cert",
+				Session: "test-session",
+			}
+			Expect(sevUnmarshalled).To(Equal(sevExpected))
+
+			// Test SEV-SNP round-trip
+			snpXML, err := xml.Marshal(snpConfig)
+			Expect(err).ToNot(HaveOccurred())
+			var snpUnmarshalled LaunchSecurity
+			Expect(xml.Unmarshal(snpXML, &snpUnmarshalled)).To(Succeed())
+			snpExpected := LaunchSecurity{
+				Type:   "sev-snp",
+				Policy: "0x30000",
+			}
+			Expect(snpUnmarshalled).To(Equal(snpExpected))
+
+			// Verify type differentiation
+			Expect(string(sevXML)).To(ContainSubstring(`type="sev"`))
+			Expect(string(sevXML)).ToNot(ContainSubstring(`type="sev-snp"`))
+			Expect(string(snpXML)).To(ContainSubstring(`type="sev-snp"`))
+			Expect(string(snpXML)).ToNot(ContainSubstring(`type="sev"`))
+		})
+
+		ginkgo.It("should handle empty structure", func() {
+			launchSecurity := &LaunchSecurity{
+				Type: "sev-snp",
+			}
+
+			xmlBytes, err := xml.Marshal(launchSecurity)
+			Expect(err).ToNot(HaveOccurred())
+
+			expectedXML := `<LaunchSecurity type="sev-snp"></LaunchSecurity>`
+			Expect(string(xmlBytes)).To(Equal(expectedXML))
+		})
+	})
+
+	ginkgo.Context("Domain integration round-trip", func() {
+		ginkgo.It("should round-trip domain with SEV-SNP launch security", func() {
+			domain := NewMinimalDomainSpec("test-domain")
+			domain.LaunchSecurity = &LaunchSecurity{
+				Type:   "sev-snp",
+				Policy: "0x30000",
+			}
+
+			xmlBytes, err := xml.Marshal(domain)
+			Expect(err).ToNot(HaveOccurred())
+
+			var parsed DomainSpec
+			Expect(xml.Unmarshal(xmlBytes, &parsed)).To(Succeed())
+
+			Expect(parsed.LaunchSecurity).ToNot(BeNil())
+			Expect(parsed.LaunchSecurity).To(Equal(domain.LaunchSecurity))
+		})
+
+		ginkgo.It("should omit LaunchSecurity when unset", func() {
+			domain := NewMinimalDomainSpec("test-domain")
+
+			xmlBytes, err := xml.Marshal(domain)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(string(xmlBytes)).ToNot(ContainSubstring("<launchSecurity"))
+
+			var parsed DomainSpec
+			Expect(xml.Unmarshal(xmlBytes, &parsed)).To(Succeed())
+			Expect(parsed.LaunchSecurity).To(BeNil())
+		})
 	})
 })

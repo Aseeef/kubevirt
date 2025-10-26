@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"kubevirt.io/kubevirt/pkg/pointer"
 	"kubevirt.io/kubevirt/pkg/virt-launcher/metadata"
+	"kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap"
 
 	"google.golang.org/grpc"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -229,7 +229,7 @@ func (n *Notifier) SendDomainEvent(event watch.Event) error {
 		return err
 	} else if response.Success != true {
 		msg := fmt.Sprintf("failed to notify domain event: %s", response.Message)
-		return fmt.Errorf(msg)
+		return fmt.Errorf("%s", msg)
 	}
 
 	return nil
@@ -256,6 +256,20 @@ func (e *eventCaller) printStatus(status *api.DomainStatus) {
 func (e *eventCaller) updateStatus(status *api.DomainStatus) {
 	e.domainStatus = status.Status
 	e.domainStatusChangeReason = status.Reason
+}
+
+type eventNotifier struct {
+	client *Notifier
+	domain *api.Domain
+	events chan watch.Event
+}
+
+func (e eventNotifier) SendEvent(event watch.Event) error {
+	return e.client.SendDomainEvent(event)
+}
+
+func (e eventNotifier) UpdateEvents(event watch.Event) {
+	updateEvents(event, e.domain, e.events)
 }
 
 func (e *eventCaller) eventCallback(c cli.Connection, domain *api.Domain, libvirtEvent libvirtEvent, client *Notifier, events chan watch.Event,
@@ -355,21 +369,13 @@ func (e *eventCaller) eventCallback(c cli.Connection, domain *api.Domain, libvir
 				// Usually this is performed by the source launcher/handler. However, in case of upgrade, this is not
 				// guaranteed as the cluster will have an updated virt-handler together with outdated launchers, this
 				// makes sure that migrations actually finish in those cases.
-				migrationMetadata, exists := metadataCache.Migration.Load()
-				if exists && migrationMetadata.EndTimestamp == nil {
-					metadataCache.Migration.WithSafeBlock(func(migrationMetadata *api.MigrationMetadata, _ bool) {
-						migrationMetadata.EndTimestamp = pointer.P(metav1.Now())
-					})
-				} else if !exists {
-					migrationMetadata := api.MigrationMetadata{
-						EndTimestamp: pointer.P(metav1.Now()),
-					}
-					metadataCache.Migration.Store(migrationMetadata)
+				notifier := eventNotifier{
+					client: client,
+					domain: domain,
+					events: events,
 				}
-
-				event := watch.Event{Type: watch.Modified, Object: domain}
-				client.SendDomainEvent(event)
-				updateEvents(event, domain, events)
+				monitor := virtwrap.NewTargetMigrationMonitor(c, events, vmi, domain, metadataCache, notifier)
+				monitor.StartMonitor()
 			}
 		}
 		if interfaceStatus != nil {
@@ -455,13 +461,7 @@ func (n *Notifier) StartDomainNotifier(
 				domainCache = util.NewDomainFromName(event.Domain, vmi.UID)
 				eventCaller.eventCallback(domainConn, domainCache, event, n, deleteNotificationSent, interfaceStatuses, guestOsInfo, vmi, fsFreezeStatus, metadataCache)
 				log.Log.Infof("Domain name event: %v", domainCache.Spec.Name)
-				if event.AgentEvent != nil {
-					if event.AgentEvent.State == libvirt.CONNECT_DOMAIN_EVENT_AGENT_LIFECYCLE_STATE_CONNECTED {
-						agentPoller.Start()
-					} else if event.AgentEvent.State == libvirt.CONNECT_DOMAIN_EVENT_AGENT_LIFECYCLE_STATE_DISCONNECTED {
-						agentPoller.Stop()
-					}
-				}
+				agentPoller.UpdateFromEvent(event.Event, event.AgentEvent)
 			case agentUpdate := <-agentStore.AgentUpdated:
 				metadataCache.ResetNotification()
 				interfaceStatuses = agentUpdate.DomainInfo.Interfaces
@@ -646,7 +646,7 @@ func (n *Notifier) SendK8sEvent(vmi *v1.VirtualMachineInstance, severity string,
 		return err
 	} else if response.Success != true {
 		msg := fmt.Sprintf("failed to notify k8s event: %s", response.Message)
-		return fmt.Errorf(msg)
+		return fmt.Errorf("%s", msg)
 	}
 
 	return nil

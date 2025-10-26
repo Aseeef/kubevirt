@@ -94,8 +94,8 @@ type SEVConfiguration struct {
 	MaxGuests       uint   `xml:"maxGuests"`
 	MaxESGuests     uint   `xml:"maxESGuests"`
 	SupportedES     string `xml:"-"`
+	SupportedSNP    string `xml:"-"`
 }
-
 type SecureExecutionConfiguration struct {
 	Supported string `xml:"supported,attr"`
 }

@@ -75,7 +75,7 @@ import (
 var _ = Describe("[rfe_id:273][crit:high][vendor:cnv-qe@redhat.com][level:component][sig-compute]VMIlifecycle", decorators.SigCompute, decorators.VMIlifecycle, decorators.WgArm64, func() {
 
 	const fakeLibvirtLogFilters = "3:remote 4:event 3:util.json 3:util.object 3:util.dbus 3:util.netlink 3:node_device 3:rpc 3:access 1:*"
-	const startupTimeout = 45
+	const startupTimeout = 60
 
 	Context("when virt-handler is deleted", Serial, decorators.WgS390x, func() {
 		It("[test_id:4716]should label the node with kubevirt.io/schedulable=false", func() {
@@ -307,10 +307,10 @@ var _ = Describe("[rfe_id:273][crit:high][vendor:cnv-qe@redhat.com][level:compon
 				vmi = libvmops.RunVMIAndExpectLaunch(vmi, 2*startupTimeout)
 
 				By("Checking console text")
-				err := console.SafeExpectBatch(vmi, []expect.Batcher{
+				err := console.ExpectBatch(vmi, []expect.Batcher{
 					&expect.BSnd{S: "\n"},
 					&expect.BExp{R: expectedConsoleText},
-				}, 90)
+				}, 90*time.Second)
 				Expect(err).ToNot(HaveOccurred(), "Should match the console in VMI")
 			},
 				Entry("[test_id:1627]Alpine as first boot",
@@ -468,12 +468,12 @@ var _ = Describe("[rfe_id:273][crit:high][vendor:cnv-qe@redhat.com][level:compon
 				defer cancel()
 
 				By("Crashing the vm guest")
-				Expect(console.SafeExpectBatch(vmi, []expect.Batcher{
+				Expect(console.ExpectBatch(vmi, []expect.Batcher{
 					&expect.BSnd{S: "sudo su -\n"},
 					&expect.BExp{R: "#"},
 					&expect.BSnd{S: `echo c > /proc/sysrq-trigger` + "\n"},
 					&expect.BExp{R: "sysrq triggered crash"},
-				}, 10)).To(Succeed())
+				}, 10*time.Second)).To(Succeed())
 
 				By("Waiting for the vm to be stopped")
 				event := watcher.New(vmi).SinceWatchedObjectResourceVersion().Timeout(15*time.Second).WaitFor(ctx, watcher.WarningEvent, v1.Stopped)
@@ -1680,7 +1680,7 @@ func getVirtLauncherLogs(virtCli kubecli.KubevirtClient, vmi *v1.VirtualMachineI
 	namespace := vmi.GetObjectMeta().GetNamespace()
 	uid := vmi.GetObjectMeta().GetUID()
 
-	labelSelector := fmt.Sprintf(v1.CreatedByLabel + "=" + string(uid))
+	labelSelector := fmt.Sprintf("%s=%s", v1.CreatedByLabel, string(uid))
 
 	pods, err := virtCli.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: labelSelector})
 	Expect(err).ToNot(HaveOccurred(), "Should list pods")

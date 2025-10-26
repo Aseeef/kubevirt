@@ -36,6 +36,7 @@ go_library(
         "//pkg/network/vmispec:go_default_library",
         "//pkg/pointer:go_default_library",
         "//pkg/safepath:go_default_library",
+        "//pkg/storage/cbt:go_default_library",
         "//pkg/storage/reservation:go_default_library",
         "//pkg/storage/types:go_default_library",
         "//pkg/unsafepath:go_default_library",
@@ -98,6 +99,7 @@ go_test(
         "vm_test.go",
     ],
     embed = [":go_default_library"],
+    race = "on",
     tags = ["cov"],
     deps = [
         "//pkg/certificates:go_default_library",
@@ -150,6 +152,7 @@ go_test(
 
 ginkgo_test(
     name = "go_parallel_test",
+    timeout = "long",
     ginkgo_args = ["-p"],
     go_test = ":go_default_test",
     tags = ["nocov"],

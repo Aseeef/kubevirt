@@ -49,7 +49,6 @@ import (
 	"kubevirt.io/kubevirt/pkg/pointer"
 	"kubevirt.io/kubevirt/pkg/virtctl/create"
 	"kubevirt.io/kubevirt/pkg/virtctl/create/vm"
-	"kubevirt.io/kubevirt/tests/clientcmd"
 	"kubevirt.io/kubevirt/tests/console"
 	cd "kubevirt.io/kubevirt/tests/containerdisk"
 	"kubevirt.io/kubevirt/tests/decorators"
@@ -248,7 +247,7 @@ chpasswd: { expire: False }`
 		instancetype := createInstancetype(virtClient)
 		preference := createPreference(virtClient)
 		dataSource := createAnnotatedDataSource(virtClient, "something", "something")
-		pvc := libstorage.CreateFSPVC("vm-pvc-"+rand.String(randNameTail), testsuite.GetTestNamespace(nil), size, nil)
+		pvc := libstorage.CreateFSPVC("vm-pvc-"+rand.String(randNameTail), testsuite.GetTestNamespace(nil), size, libstorage.WithStorageProfile())
 		userDataB64 := base64.StdEncoding.EncodeToString([]byte(cloudInitUserData))
 
 		out, err := runCreateVMCmd(
@@ -636,7 +635,7 @@ chpasswd: { expire: False }`
 		Expect(err).ToNot(HaveOccurred())
 		libwait.WaitUntilVMIReady(vmi, console.LoginToAlpine)
 
-		runSSHCommand(vm.Namespace, vm.Name, user, keyFile)
+		runSSHCommand(vm.Name, user, keyFile)
 	})
 
 	It("[test_id:11653]Complex example with access credentials", func() {
@@ -699,12 +698,13 @@ chpasswd: { expire: False }`
 			g.Expect(vmi).To(matcher.HaveConditionTrue(v1.VirtualMachineInstanceAccessCredentialsSynchronized))
 		}, 60*time.Second, 1*time.Second).Should(Succeed())
 
-		runSSHCommand(secret.Namespace, vm.Name, user, keyFile)
+		runSSHCommand(vm.Name, user, keyFile)
 	})
 
 	It("[test_id:11654]Failure of implicit inference does not fail the VM creation", func() {
 		By("Creating a PVC without annotation labels")
-		pvc := libstorage.CreateFSPVC("vm-pvc-"+rand.String(randNameTail), testsuite.GetTestNamespace(nil), size, nil)
+		pvc := libstorage.CreateFSPVC("vm-pvc-"+rand.String(randNameTail), testsuite.GetTestNamespace(nil), size, libstorage.WithStorageProfile())
+
 		volumeName := "imported-volume"
 
 		By("Creating a VM with implicit inference (inference enabled by default)")
@@ -822,31 +822,12 @@ func createAnnotatedDataSource(virtClient kubecli.KubevirtClient, instancetypeNa
 
 func createAnnotatedSourcePVC(instancetypeName, preferenceName string) *k8sv1.PersistentVolumeClaim {
 	const randNameTail = 5
-	return libstorage.CreateFSPVC("vm-pvc-"+rand.String(randNameTail), testsuite.GetTestNamespace(nil), "128Mi", map[string]string{
-		apiinstancetype.DefaultInstancetypeLabel:     instancetypeName,
-		apiinstancetype.DefaultInstancetypeKindLabel: apiinstancetype.SingularResourceName,
-		apiinstancetype.DefaultPreferenceLabel:       preferenceName,
-		apiinstancetype.DefaultPreferenceKindLabel:   apiinstancetype.SingularPreferenceResourceName,
-	})
-}
-
-func runSSHCommand(namespace, name, user, keyFile string) {
-	libssh.DisableSSHAgent()
-	// The virtctl binary needs to run here because of the way local SSH client wrapping works.
-	// Running the command through newRepeatableVirtctlCommand does not suffice.
-	_, cmd, err := clientcmd.CreateCommandWithNS(testsuite.GetTestNamespace(nil), "virtctl",
-		"ssh",
-		"--namespace", namespace,
-		"--username", user,
-		"--identity-file", keyFile,
-		"--known-hosts=",
-		"-t", "-o StrictHostKeyChecking=no",
-		"-t", "-o UserKnownHostsFile=/dev/null",
-		"--command", "true",
-		"vm/"+name,
-	)
-	Expect(err).ToNot(HaveOccurred())
-	out, err := cmd.CombinedOutput()
-	Expect(err).ToNot(HaveOccurred())
-	Expect(out).ToNot(BeEmpty())
+	return libstorage.CreateFSPVC("vm-pvc-"+rand.String(randNameTail), testsuite.GetTestNamespace(nil), "128Mi",
+		libstorage.WithStorageProfile(),
+		libstorage.WithLabels(map[string]string{
+			apiinstancetype.DefaultInstancetypeLabel:     instancetypeName,
+			apiinstancetype.DefaultInstancetypeKindLabel: apiinstancetype.SingularResourceName,
+			apiinstancetype.DefaultPreferenceLabel:       preferenceName,
+			apiinstancetype.DefaultPreferenceKindLabel:   apiinstancetype.SingularPreferenceResourceName,
+		}))
 }

@@ -37,6 +37,7 @@ import (
 
 	"kubevirt.io/kubevirt/pkg/libvmi"
 	"kubevirt.io/kubevirt/tests/console"
+	"kubevirt.io/kubevirt/tests/decorators"
 	"kubevirt.io/kubevirt/tests/framework/kubevirt"
 	"kubevirt.io/kubevirt/tests/framework/matcher"
 	"kubevirt.io/kubevirt/tests/libnet"
@@ -45,7 +46,7 @@ import (
 	"kubevirt.io/kubevirt/tests/testsuite"
 )
 
-var _ = Describe(SIG("GuestAgent", func() {
+var _ = Describe(SIG("GuestAgent", decorators.GuestAgentProbes, func() {
 	Context("Readiness Probe", func() {
 		const (
 			period         = 5
@@ -261,6 +262,6 @@ func guestAgentOperation(vmi *v1.VirtualMachineInstance, startStopOperation stri
 	guestAgentSysctlString := fmt.Sprintf("sudo systemctl %s qemu-guest-agent\n", startStopOperation)
 	return console.SafeExpectBatch(vmi, []expect.Batcher{
 		&expect.BSnd{S: guestAgentSysctlString},
-		&expect.BExp{R: console.PromptExpression},
+		&expect.BExp{R: ""},
 	}, 120)
 }

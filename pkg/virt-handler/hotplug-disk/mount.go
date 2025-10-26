@@ -1,3 +1,22 @@
+/*
+ * This file is part of the KubeVirt project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * Copyright The KubeVirt Authors.
+ *
+ */
+
 package hotplug_volume
 
 import (
@@ -113,8 +132,8 @@ var (
 		return isolation.IsBlockDevice(path)
 	}
 
-	isolationDetector = func(path string) isolation.PodIsolationDetector {
-		return isolation.NewSocketBasedIsolationDetector(path)
+	isolationDetector = func() isolation.PodIsolationDetector {
+		return isolation.NewSocketBasedIsolationDetector()
 	}
 
 	parentPathForMount = func(
@@ -553,8 +572,8 @@ func (m *volumeMounter) findVirtlauncherUID(vmi *v1.VirtualMachineInstance) (uid
 }
 
 func (m *volumeMounter) getSourcePodFilePath(sourceUID types.UID, vmi *v1.VirtualMachineInstance, volume string) (*safepath.Path, error) {
-	iso := isolationDetector("/path")
-	isoRes, err := iso.DetectForSocket(vmi, socketPath(sourceUID))
+	iso := isolationDetector()
+	isoRes, err := iso.DetectForSocket(socketPath(sourceUID))
 	if err != nil {
 		return nil, err
 	}

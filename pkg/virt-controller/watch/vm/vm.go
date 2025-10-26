@@ -50,6 +50,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	k8sfield "k8s.io/apimachinery/pkg/util/validation/field"
@@ -66,6 +67,7 @@ import (
 
 	"kubevirt.io/kubevirt/pkg/apimachinery/patch"
 	"kubevirt.io/kubevirt/pkg/controller"
+	"kubevirt.io/kubevirt/pkg/storage/cbt"
 	storagehotplug "kubevirt.io/kubevirt/pkg/storage/hotplug"
 	"kubevirt.io/kubevirt/pkg/storage/memorydump"
 	storagetypes "kubevirt.io/kubevirt/pkg/storage/types"
@@ -96,7 +98,6 @@ const (
 	failedCreateCRforVmErrMsg                 = "Failed to create controller revision for VirtualMachine."
 	failedProcessDeleteNotificationErrMsg     = "Failed to process delete notification"
 	failureDeletingVmiErrFormat               = "Failure attempting to delete VMI: %v"
-	failedCleanupRestartRequired              = "Failed to delete RestartRequired condition or last-seen controller revisions"
 	failedManualRecoveryRequiredCondSetErrMsg = "cannot start the VM since it has the manual recovery required condtion set"
 
 	// UnauthorizedDataVolumeCreateReason is added in an event when the DataVolume
@@ -114,16 +115,16 @@ const (
 )
 
 const (
-	hotplugVolumeErrorReason     = "HotPlugVolumeError"
-	hotplugCPUErrorReason        = "HotPlugCPUError"
-	failedUpdateErrorReason      = "FailedUpdateError"
-	failedCreateReason           = "FailedCreate"
-	vmiFailedDeleteReason        = "FailedDelete"
-	affinityChangeErrorReason    = "AffinityChangeError"
-	hotplugMemoryErrorReason     = "HotPlugMemoryError"
-	volumesUpdateErrorReason     = "VolumesUpdateError"
-	tolerationsChangeErrorReason = "TolerationsChangeError"
-	annotationsChangeErrorReason = "AnnotationsChangeError"
+	hotplugVolumeErrorReason           = "HotPlugVolumeError"
+	hotplugCPUErrorReason              = "HotPlugCPUError"
+	failedUpdateErrorReason            = "FailedUpdateError"
+	failedCreateReason                 = "FailedCreate"
+	vmiFailedDeleteReason              = "FailedDelete"
+	affinityChangeErrorReason          = "AffinityChangeError"
+	hotplugMemoryErrorReason           = "HotPlugMemoryError"
+	volumesUpdateErrorReason           = "VolumesUpdateError"
+	tolerationsChangeErrorReason       = "TolerationsChangeError"
+	annotationsLabelsChangeErrorReason = "AnnotationsLabelsChangeError"
 )
 
 const defaultMaxCrashLoopBackoffDelaySeconds = 300
@@ -132,7 +133,8 @@ func NewController(vmiInformer cache.SharedIndexInformer,
 	vmInformer cache.SharedIndexInformer,
 	dataVolumeInformer cache.SharedIndexInformer,
 	dataSourceInformer cache.SharedIndexInformer,
-	namespaceStore cache.Store,
+	kubeVirtInformer cache.SharedIndexInformer,
+	namespaceInformer cache.SharedIndexInformer,
 	pvcInformer cache.SharedIndexInformer,
 	crInformer cache.SharedIndexInformer,
 	recorder record.EventRecorder,
@@ -141,6 +143,8 @@ func NewController(vmiInformer cache.SharedIndexInformer,
 	netSynchronizer synchronizer,
 	firmwareSynchronizer synchronizer,
 	instancetypeController instancetypeHandler,
+	additionalLauncherAnnotationsSync []string,
+	additionalLauncherLabelsSync []string,
 ) (*Controller, error) {
 
 	c := &Controller{
@@ -152,7 +156,7 @@ func NewController(vmiInformer cache.SharedIndexInformer,
 		vmIndexer:              vmInformer.GetIndexer(),
 		dataVolumeStore:        dataVolumeInformer.GetStore(),
 		dataSourceStore:        dataSourceInformer.GetStore(),
-		namespaceStore:         namespaceStore,
+		namespaceStore:         namespaceInformer.GetStore(),
 		pvcStore:               pvcInformer.GetStore(),
 		crIndexer:              crInformer.GetIndexer(),
 		instancetypeController: instancetypeController,
@@ -164,9 +168,11 @@ func NewController(vmiInformer cache.SharedIndexInformer,
 			response, err := dv.AuthorizeSA(requestNamespace, requestName, proxy, saNamespace, saName)
 			return response.Allowed, response.Reason, err
 		},
-		clusterConfig:        clusterConfig,
-		netSynchronizer:      netSynchronizer,
-		firmwareSynchronizer: firmwareSynchronizer,
+		clusterConfig:                     clusterConfig,
+		netSynchronizer:                   netSynchronizer,
+		firmwareSynchronizer:              firmwareSynchronizer,
+		additionalLauncherAnnotationsSync: additionalLauncherAnnotationsSync,
+		additionalLauncherLabelsSync:      additionalLauncherLabelsSync,
 	}
 
 	c.hasSynced = func() bool {
@@ -204,6 +210,20 @@ func NewController(vmiInformer cache.SharedIndexInformer,
 
 	_, err = pvcInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: c.addPVC,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = kubeVirtInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		UpdateFunc: c.handleKubeVirtUpdate,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = namespaceInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		UpdateFunc: c.handleNamespaceUpdate,
 	})
 	if err != nil {
 		return nil, err
@@ -278,6 +298,9 @@ type Controller struct {
 
 	netSynchronizer      synchronizer
 	firmwareSynchronizer synchronizer
+
+	additionalLauncherAnnotationsSync []string
+	additionalLauncherLabelsSync      []string
 }
 
 func (c *Controller) Run(threadiness int, stopCh <-chan struct{}) {
@@ -478,7 +501,7 @@ func (c *Controller) authorizeDataVolume(vm *virtv1.VirtualMachine, dataVolume *
 	}
 
 	if !allowed {
-		return fmt.Errorf(reason)
+		return fmt.Errorf("%s", reason)
 	}
 
 	return nil
@@ -588,7 +611,7 @@ func (c *Controller) VMICPUsPatch(vm *virtv1.VirtualMachine, vmi *virtv1.Virtual
 
 	_, err = c.clientset.VirtualMachineInstance(vmi.Namespace).Patch(context.Background(), vmi.Name, types.JSONPatchType, patchBytes, v1.PatchOptions{})
 	if err == nil {
-		log.Log.Object(vmi).Infof(logMsg)
+		log.Log.Object(vmi).Infof("%s", logMsg)
 	}
 
 	return err
@@ -843,37 +866,6 @@ func (c *Controller) handleVolumeUpdateRequest(vm *virtv1.VirtualMachine, vmi *v
 		return nil
 	}
 
-	// The pull policy for container disks are only set on the VMI spec and not on the VM spec.
-	// In order to correctly compare the volumes set, we need to set the pull policy on the VM spec as well.
-	vmCopy := vm.DeepCopy()
-	volsVMI := storagetypes.GetVolumesByName(&vmi.Spec)
-	for i, volume := range vmCopy.Spec.Template.Spec.Volumes {
-		vmiVol, ok := volsVMI[volume.Name]
-		if !ok {
-			continue
-		}
-		if vmiVol.ContainerDisk != nil {
-			vmCopy.Spec.Template.Spec.Volumes[i].ContainerDisk.ImagePullPolicy = vmiVol.ContainerDisk.ImagePullPolicy
-		}
-	}
-	hotplugOp := false
-	volsVM := storagetypes.GetVolumesByName(&vmCopy.Spec.Template.Spec)
-	for _, volume := range vmi.Spec.Volumes {
-		hotpluggableVol := (volume.VolumeSource.PersistentVolumeClaim != nil &&
-			volume.VolumeSource.PersistentVolumeClaim.Hotpluggable) ||
-			(volume.VolumeSource.DataVolume != nil && volume.VolumeSource.DataVolume.Hotpluggable)
-		_, ok := volsVM[volume.Name]
-		if !ok && hotpluggableVol {
-			hotplugOp = true
-		}
-	}
-	if hotplugOp {
-		return nil
-	}
-	if equality.Semantic.DeepEqual(vmi.Spec.Volumes, vmCopy.Spec.Template.Spec.Volumes) {
-		return nil
-	}
-	vmConditions := controller.NewVirtualMachineConditionManager()
 	// Abort the volume migration if any of the previous migrated volumes
 	// has changed
 	if volMigAbort, err := volumemig.VolumeMigrationCancel(c.clientset, vmi, vm); volMigAbort {
@@ -886,11 +878,13 @@ func (c *Controller) handleVolumeUpdateRequest(vm *virtv1.VirtualMachine, vmi *v
 	switch {
 	case vm.Spec.UpdateVolumesStrategy == nil ||
 		*vm.Spec.UpdateVolumesStrategy == virtv1.UpdateVolumesStrategyReplacement:
-		if !vmConditions.HasCondition(vm, virtv1.VirtualMachineRestartRequired) {
-			log.Log.Object(vm).Infof("Set restart required condition because of a volumes update")
-			setRestartRequired(vm, "the volumes replacement is effective only after restart")
-		}
+		log.Log.Object(vm).V(4).Infof("not handling replacement update volumes strategy")
 	case *vm.Spec.UpdateVolumesStrategy == virtv1.UpdateVolumesStrategyMigration:
+		if !volumemig.PersistentVolumesUpdated(&vm.Spec.Template.Spec, &vmi.Spec) {
+			log.Log.Object(vm).V(4).Infof("No persistent volumes updated")
+			return nil
+		}
+
 		// Validate if the update volumes can be migrated
 		if err := volumemig.ValidateVolumes(vmi, vm, c.dataVolumeStore, c.pvcStore); err != nil {
 			return c.handleValidationErrors(err, vmi, vm)
@@ -1228,13 +1222,13 @@ func isSetToStart(vm *virtv1.VirtualMachine, vmi *virtv1.VirtualMachineInstance)
 	}
 }
 
-func (c *Controller) cleanupRestartRequired(vm *virtv1.VirtualMachine) (*virtv1.VirtualMachine, error) {
+func (c *Controller) cleanupRestartRequired(vm *virtv1.VirtualMachine) *virtv1.VirtualMachine {
 	vmConditionManager := controller.NewVirtualMachineConditionManager()
 	if vmConditionManager.HasCondition(vm, virtv1.VirtualMachineRestartRequired) {
 		vmConditionManager.RemoveCondition(vm, virtv1.VirtualMachineRestartRequired)
 	}
 
-	return vm, c.deleteVMRevisions(vm)
+	return vm
 }
 
 func (c *Controller) startVMI(vm *virtv1.VirtualMachine) (*virtv1.VirtualMachine, error) {
@@ -1260,11 +1254,7 @@ func (c *Controller) startVMI(vm *virtv1.VirtualMachine) (*virtv1.VirtualMachine
 		return vm, nil
 	}
 
-	vm, err = c.cleanupRestartRequired(vm)
-	if err != nil {
-		log.Log.Object(vm).Reason(err).Error(failedCleanupRestartRequired)
-		return vm, err
-	}
+	vm = c.cleanupRestartRequired(vm)
 
 	// start it
 	vmi := SetupVMIFromVM(vm)
@@ -1292,6 +1282,8 @@ func (c *Controller) startVMI(vm *virtv1.VirtualMachine) (*virtv1.VirtualMachine
 		c.recorder.Eventf(vm, k8score.EventTypeWarning, common.FailedCreateVirtualMachineReason, "Error applying device preferences again: %v", err)
 		return vm, err
 	}
+
+	cbt.SetChangedBlockTrackingOnVMI(vm, vmi, c.clusterConfig, c.namespaceStore)
 
 	AutoAttachInputDevice(vmi)
 
@@ -1664,11 +1656,7 @@ func (c *Controller) stopVMI(vm *virtv1.VirtualMachine, vmi *virtv1.VirtualMachi
 		return vm, err
 	}
 
-	vm, err = c.cleanupRestartRequired(vm)
-	if err != nil {
-		log.Log.Object(vm).Reason(err).Error(failedCleanupRestartRequired)
-		return vm, nil
-	}
+	vm = c.cleanupRestartRequired(vm)
 
 	c.recorder.Eventf(vm, k8score.EventTypeNormal, common.SuccessfulDeleteVirtualMachineReason, "Stopped the virtual machine by deleting the virtual machine instance %v", vmi.ObjectMeta.UID)
 	log.Log.Object(vm).Infof("Dispatching delete event for vmi %s with phase %s", controller.NamespacedKey(vmi.Namespace, vmi.Name), vmi.Status.Phase)
@@ -1745,35 +1733,6 @@ func (c *Controller) deleteOlderVMRevision(vm *virtv1.VirtualMachine) (bool, err
 	}
 
 	return createNotNeeded, nil
-}
-
-func (c *Controller) deleteVMRevisions(vm *virtv1.VirtualMachine) error {
-	keys, err := c.crIndexer.IndexKeys("vm", string(vm.UID))
-	if err != nil {
-		return err
-	}
-
-	for _, key := range keys {
-		if !strings.Contains(key, vmRevisionName(vm.UID)) {
-			continue
-		}
-
-		storeObj, exists, err := c.crIndexer.GetByKey(key)
-		if !exists || err != nil {
-			return err
-		}
-		cr, ok := storeObj.(*appsv1.ControllerRevision)
-		if !ok {
-			return fmt.Errorf("unexpected resource %+v", storeObj)
-		}
-
-		err = c.clientset.AppsV1().ControllerRevisions(vm.Namespace).Delete(context.Background(), cr.Name, metav1.DeleteOptions{})
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // getControllerRevision attempts to get the controller revision by name and
@@ -2510,6 +2469,7 @@ func (c *Controller) updateStatus(vm, vmOrig *virtv1.VirtualMachine, vmi *virtv1
 	syncVolumeMigration(vm, vmi)
 	syncConditions(vm, vmi, syncErr)
 	c.setPrintableStatus(vm, vmi)
+	cbt.SyncVMChangedBlockTrackingState(vm, vmi, c.clusterConfig, c.namespaceStore)
 
 	// only update if necessary
 	if !equality.Semantic.DeepEqual(vm.Status, vmOrig.Status) {
@@ -3014,16 +2974,17 @@ func (c *Controller) addRestartRequiredIfNeeded(lastSeenVMSpec *virtv1.VirtualMa
 		return false
 	}
 
+	if validLiveUpdateVolumes(&lastSeenVM.Spec, currentVM) {
+		lastSeenVM.Spec.Template.Spec.Volumes = currentVM.Spec.Template.Spec.Volumes
+	}
+	if validLiveUpdateDisks(&lastSeenVM.Spec, currentVM) {
+		lastSeenVM.Spec.Template.Spec.Domain.Devices.Disks = currentVM.Spec.Template.Spec.Domain.Devices.Disks
+	}
+
 	// Ignore all the live-updatable fields by copying them over. (If the feature gate is disabled, nothing is live-updatable)
 	// Note: this list needs to stay up-to-date with everything that can be live-updated
 	// Note2: destroying lastSeenVM here is fine, we don't need it later
 	if c.clusterConfig.IsVMRolloutStrategyLiveUpdate() {
-		if validLiveUpdateVolumes(&lastSeenVM.Spec, currentVM) {
-			lastSeenVM.Spec.Template.Spec.Volumes = currentVM.Spec.Template.Spec.Volumes
-		}
-		if validLiveUpdateDisks(&lastSeenVM.Spec, currentVM) {
-			lastSeenVM.Spec.Template.Spec.Domain.Devices.Disks = currentVM.Spec.Template.Spec.Domain.Devices.Disks
-		}
 		if lastSeenVM.Spec.Template.Spec.Domain.CPU != nil && currentVM.Spec.Template.Spec.Domain.CPU != nil {
 			lastSeenVM.Spec.Template.Spec.Domain.CPU.Sockets = currentVM.Spec.Template.Spec.Domain.CPU.Sockets
 		}
@@ -3038,19 +2999,6 @@ func (c *Controller) addRestartRequiredIfNeeded(lastSeenVMSpec *virtv1.VirtualMa
 		lastSeenVM.Spec.Template.Spec.NodeSelector = currentVM.Spec.Template.Spec.NodeSelector
 		lastSeenVM.Spec.Template.Spec.Affinity = currentVM.Spec.Template.Spec.Affinity
 		lastSeenVM.Spec.Template.Spec.Tolerations = currentVM.Spec.Template.Spec.Tolerations
-	} else {
-		// In the case live-updates aren't enable the volume set of the VM can be still changed by volume hotplugging.
-		// For imperative volume hotplug, first the VM status with the request AND the VMI spec are updated, then in the
-		// next iteration, the VM spec is updated as well. Here, we're in this iteration where the currentVM has for the first
-		// time the updated hotplugged volumes. Hence, we can compare the current VM volumes and disks with the ones belonging
-		// to the VMI.
-		// In case of a declarative update, the flow is the opposite, first we update the VM spec and then the VMI. Therefore, if
-		// the change was declarative, then the VMI would still not have the update.
-		if equality.Semantic.DeepEqual(currentVM.Spec.Template.Spec.Volumes, vmi.Spec.Volumes) &&
-			equality.Semantic.DeepEqual(currentVM.Spec.Template.Spec.Domain.Devices.Disks, vmi.Spec.Domain.Devices.Disks) {
-			lastSeenVM.Spec.Template.Spec.Volumes = currentVM.Spec.Template.Spec.Volumes
-			lastSeenVM.Spec.Template.Spec.Domain.Devices.Disks = currentVM.Spec.Template.Spec.Domain.Devices.Disks
-		}
 	}
 
 	if !netvmliveupdate.IsRestartRequired(currentVM, vmi) {
@@ -3066,53 +3014,63 @@ func (c *Controller) addRestartRequiredIfNeeded(lastSeenVMSpec *virtv1.VirtualMa
 	return false
 }
 
-func (c *Controller) syncVMAnnotationsToVMI(vm *virtv1.VirtualMachine, vmi *virtv1.VirtualMachineInstance) (*virtv1.VirtualMachineInstance, error) {
-	if vm == nil || vmi == nil || vmi.DeletionTimestamp != nil {
+// These "dynamic" annotations/labels are VMI annotations/labels which may diverge from the VM over time that we want to keep in sync.
+func (c *Controller) syncDynamicAnnotationsAndLabelsToVMI(vm *virtv1.VirtualMachine, vmi *virtv1.VirtualMachineInstance) (*virtv1.VirtualMachineInstance, error) {
+	if vm == nil || vm.Spec.Template == nil || vmi == nil || vmi.DeletionTimestamp != nil {
 		return vmi, nil
 	}
 
 	patchSet := patch.New()
+	newVmiAnnotations := maps.Clone(vmi.Annotations)
+	newVmiLabels := maps.Clone(vmi.Labels)
 
-	annotationsToSync := []string{
-		descheduler.EvictPodAnnotationKeyAlpha,
-		descheduler.EvictPodAnnotationKeyAlphaPreferNoEviction,
-	}
-
-	newVMIAnnotations := map[string]string{}
-	for k, v := range vmi.Annotations {
-		newVMIAnnotations[k] = v
-	}
-
-	changed := false
-	for _, key := range annotationsToSync {
-		vmVal := ""
-		vmExists := false
-		if vm.Spec.Template != nil {
-			vmVal, vmExists = vm.Spec.Template.ObjectMeta.Annotations[key]
-		}
-		vmiVal, vmiExists := newVMIAnnotations[key]
-
-		if vmExists != vmiExists || vmVal != vmiVal {
+	syncMap := func(keys []string, vmMap, vmiMap, vmiOrigMap map[string]string, subPath string) {
+		changed := false
+		for _, key := range keys {
+			vmVal, vmExists := vmMap[key]
+			vmiVal, vmiExists := vmiMap[key]
+			if vmExists == vmiExists && vmVal == vmiVal {
+				continue
+			}
 			changed = true
 			if vmExists {
-				newVMIAnnotations[key] = vmVal
+				vmiMap[key] = vmVal
 			} else {
-				delete(newVMIAnnotations, key)
+				delete(vmiMap, key)
 			}
+		}
+
+		if !changed {
+			return
+		}
+
+		if vmiOrigMap == nil {
+			patchSet.AddOption(patch.WithAdd("/metadata/"+subPath, vmiMap))
+		} else {
+			patchSet.AddOption(
+				patch.WithTest("/metadata/"+subPath, vmiOrigMap),
+				patch.WithReplace("/metadata/"+subPath, vmiMap),
+			)
 		}
 	}
 
-	if !changed {
-		return vmi, nil
-	}
+	dynamicLabels := []string{}
+	dynamicLabels = append(dynamicLabels, c.additionalLauncherLabelsSync...)
+	dynamicAnnotations := []string{descheduler.EvictPodAnnotationKeyAlpha, descheduler.EvictPodAnnotationKeyAlphaPreferNoEviction}
+	dynamicAnnotations = append(dynamicAnnotations, c.additionalLauncherAnnotationsSync...)
 
-	if vmi.ObjectMeta.Annotations == nil {
-		patchSet.AddOption(patch.WithAdd("/metadata/annotations", newVMIAnnotations))
-	} else {
-		patchSet.AddOption(
-			patch.WithTest("/metadata/annotations", vmi.ObjectMeta.Annotations),
-			patch.WithReplace("/metadata/annotations", newVMIAnnotations),
-		)
+	syncMap(
+		dynamicLabels,
+		vm.Spec.Template.ObjectMeta.Labels, newVmiLabels, vmi.ObjectMeta.Labels, "labels",
+	)
+
+	syncMap(
+		dynamicAnnotations,
+		vm.Spec.Template.ObjectMeta.Annotations, newVmiAnnotations, vmi.ObjectMeta.Annotations, "annotations",
+	)
+
+	if patchSet.IsEmpty() {
+		return vmi, nil
 	}
 
 	generatedPatch, err := patchSet.GeneratePayload()
@@ -3255,8 +3213,8 @@ func (c *Controller) sync(vm *virtv1.VirtualMachine, vmi *virtv1.VirtualMachineI
 		return vm, vmi, common.NewSyncError(fmt.Errorf("Error encountered while handling memory dump request: %v", err), memorydump.ErrorReason), nil
 	}
 
-	if vmi, err = c.syncVMAnnotationsToVMI(vmCopy, vmi); err != nil {
-		return vm, vmi, common.NewSyncError(fmt.Errorf("Error encountered while handling annotation sync request: %v", err), annotationsChangeErrorReason), nil
+	if vmi, err = c.syncDynamicAnnotationsAndLabelsToVMI(vmCopy, vmi); err != nil {
+		return vm, vmi, common.NewSyncError(fmt.Errorf("Error encountered while handling annotation and labels sync request: %v", err), annotationsLabelsChangeErrorReason), nil
 	}
 
 	conditionManager := controller.NewVirtualMachineConditionManager()
@@ -3460,7 +3418,7 @@ func (c *Controller) handleMemoryHotplugRequest(vm *virtv1.VirtualMachine, vmi *
 		return err
 	}
 
-	log.Log.Object(vmi).Infof(logMsg)
+	log.Log.Object(vmi).Infof("%s", logMsg)
 
 	return nil
 }
@@ -3472,4 +3430,69 @@ func (c *Controller) handleDeclarativeVolumeHotplug(vm *virtv1.VirtualMachine, v
 	}
 
 	return storagehotplug.HandleDeclarativeVolumes(c.clientset, vm, vmi)
+}
+
+func (c *Controller) handleKubeVirtUpdate(oldObj, newObj interface{}) {
+	okv, ok := oldObj.(*virtv1.KubeVirt)
+	if !ok {
+		return
+	}
+
+	nkv, ok := newObj.(*virtv1.KubeVirt)
+	if !ok {
+		return
+	}
+	oldCBTSelectors := okv.Spec.Configuration.ChangedBlockTrackingLabelSelectors
+	newCBTSelectors := nkv.Spec.Configuration.ChangedBlockTrackingLabelSelectors
+	if equality.Semantic.DeepEqual(oldCBTSelectors, newCBTSelectors) {
+		return
+	}
+
+	// In case the ChangedBlockTrackingLabelSelectors has changed,
+	// we need to re-queue all the VMs as the CBT might have changed for them
+	keys := c.vmIndexer.ListKeys()
+	for _, key := range keys {
+		c.Queue.Add(key)
+	}
+}
+
+func (c *Controller) handleNamespaceUpdate(oldObj, newObj interface{}) {
+	oldNS, ok := oldObj.(*k8score.Namespace)
+	if !ok {
+		return
+	}
+	newNS, ok := newObj.(*k8score.Namespace)
+	if !ok {
+		return
+	}
+	oldNSLabels := oldNS.Labels
+	newNSLabels := newNS.Labels
+	if equality.Semantic.DeepEqual(oldNSLabels, newNSLabels) {
+		return
+	}
+	labelSelectors := c.clusterConfig.GetConfig().ChangedBlockTrackingLabelSelectors
+	if labelSelectors == nil {
+		return
+	}
+	namespaceSelector := labelSelectors.NamespaceLabelSelector
+	if namespaceSelector == nil {
+		return
+	}
+	nsSelector, err := metav1.LabelSelectorAsSelector(namespaceSelector)
+	if err != nil {
+		return
+	}
+
+	if nsSelector.Matches(labels.Set(oldNS.Labels)) ==
+		nsSelector.Matches(labels.Set(newNS.Labels)) {
+		return
+	}
+
+	vmKeys, err := c.vmIndexer.IndexKeys(cache.NamespaceIndex, newNS.Name)
+	if err != nil {
+		return
+	}
+	for _, vmKey := range vmKeys {
+		c.Queue.Add(vmKey)
+	}
 }
