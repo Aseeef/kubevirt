@@ -46,6 +46,7 @@ import (
 	drautil "kubevirt.io/kubevirt/pkg/dra"
 	"kubevirt.io/kubevirt/pkg/pointer"
 
+	"kubevirt.io/kubevirt/pkg/apimachinery"
 	containerdisk "kubevirt.io/kubevirt/pkg/container-disk"
 	"kubevirt.io/kubevirt/pkg/hooks"
 	metrics "kubevirt.io/kubevirt/pkg/monitoring/metrics/virt-controller"
@@ -241,8 +242,8 @@ func sysprepVolumeSource(sysprepVolume v1.SysprepSource) (k8sv1.VolumeSource, er
 		}, nil
 	}
 	errorStr := fmt.Sprintf("Sysprep must have Secret or ConfigMap reference set %v", sysprepVolume)
-	logger.Errorf(errorStr)
-	return k8sv1.VolumeSource{}, fmt.Errorf(errorStr)
+	logger.Errorf("%s", errorStr)
+	return k8sv1.VolumeSource{}, fmt.Errorf("%s", errorStr)
 }
 
 func (t *TemplateService) GetLauncherImage() string {
@@ -697,10 +698,16 @@ func (t *TemplateService) newNodeSelectorRenderer(vmi *v1.VirtualMachineInstance
 		log.Log.V(4).Info("Add SEV node label selector")
 		opts = append(opts, WithSEVSelector())
 	}
-	if isSEVESVMI(vmi) {
+	if util.IsSEVESVMI(vmi) {
 		log.Log.V(4).Info("Add SEV-ES node label selector")
 		opts = append(opts, WithSEVESSelector())
 	}
+
+	if util.IsSEVSNPVMI(vmi) {
+		log.Log.V(4).Info("Add SEV-SNP node label selector")
+		opts = append(opts, WithSEVSNPSelector())
+	}
+
 	if util.IsSecureExecutionVMI(vmi) {
 		log.Log.V(4).Info("Add Secure Execution node label selector")
 		opts = append(opts, WithSecureExecutionSelector())
@@ -1564,7 +1571,8 @@ func podLabels(vmi *v1.VirtualMachineInstance, hostName string) map[string]strin
 	}
 	labels[v1.AppLabel] = "virt-launcher"
 	labels[v1.CreatedByLabel] = string(vmi.UID)
-	labels[v1.VirtualMachineNameLabel] = hostName
+	labels[v1.DeprecatedVirtualMachineNameLabel] = hostName
+	labels[v1.VirtualMachineInstanceIDLabel] = apimachinery.CalculateVirtualMachineInstanceID(vmi.Name)
 	if val, exists := vmi.Annotations[istio.InjectSidecarAnnotation]; exists {
 		labels[istio.InjectSidecarLabel] = val
 	}
@@ -1599,14 +1607,6 @@ func WithNetTargetAnnotationsGenerator(generator targetAnnotationsGenerator) tem
 
 func hasHugePages(vmi *v1.VirtualMachineInstance) bool {
 	return vmi.Spec.Domain.Memory != nil && vmi.Spec.Domain.Memory.Hugepages != nil
-}
-
-// Check if a VMI spec requests AMD SEV-ES
-func isSEVESVMI(vmi *v1.VirtualMachineInstance) bool {
-	return util.IsSEVVMI(vmi) &&
-		vmi.Spec.Domain.LaunchSecurity.SEV.Policy != nil &&
-		vmi.Spec.Domain.LaunchSecurity.SEV.Policy.EncryptedState != nil &&
-		*vmi.Spec.Domain.LaunchSecurity.SEV.Policy.EncryptedState
 }
 
 // isGPUVMIDevicePlugins checks if a VMI has any GPUs configured for device plugins

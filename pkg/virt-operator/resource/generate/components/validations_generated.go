@@ -358,6 +358,14 @@ var CRDsValidation map[string]string = map[string]string{
                 imageStream:
                   description: ImageStream is the name of image stream for import
                   type: string
+                platform:
+                  description: Platform describes the minimum runtime requirements
+                    of the image
+                  properties:
+                    architecture:
+                      description: Architecture specifies the image target CPU architecture
+                      type: string
+                  type: object
                 pullMethod:
                   description: PullMethod can be either "pod" (default import), or
                     "node" (node docker cache based import)
@@ -415,6 +423,10 @@ var CRDsValidation map[string]string = map[string]string{
                 backingFile:
                   description: BackingFile is the path to the virtual hard disk to
                     migrate from vCenter/ESXi
+                  type: string
+                extraArgs:
+                  description: ExtraArgs is a reference to a ConfigMap containing
+                    extra arguments to pass directly to the VDDK library
                   type: string
                 initImageURL:
                   description: InitImageURL is an optional URL to an image containing
@@ -4437,6 +4449,15 @@ var CRDsValidation map[string]string = map[string]string{
                             description: ImageStream is the name of image stream for
                               import
                             type: string
+                          platform:
+                            description: Platform describes the minimum runtime requirements
+                              of the image
+                            properties:
+                              architecture:
+                                description: Architecture specifies the image target
+                                  CPU architecture
+                                type: string
+                            type: object
                           pullMethod:
                             description: PullMethod can be either "pod" (default import),
                               or "node" (node docker cache based import)
@@ -4494,6 +4515,10 @@ var CRDsValidation map[string]string = map[string]string{
                           backingFile:
                             description: BackingFile is the path to the virtual hard
                               disk to migrate from vCenter/ESXi
+                            type: string
+                          extraArgs:
+                            description: ExtraArgs is a reference to a ConfigMap containing
+                              extra arguments to pass directly to the VDDK library
                             type: string
                           initImageURL:
                             description: InitImageURL is an optional URL to an image
@@ -6146,13 +6171,12 @@ var CRDsValidation map[string]string = map[string]string{
                                     description: CustomBlockSize represents the desired
                                       logical and physical block size for a VM disk.
                                     properties:
+                                      discardGranularity:
+                                        type: integer
                                       logical:
                                         type: integer
                                       physical:
                                         type: integer
-                                    required:
-                                    - logical
-                                    - physical
                                     type: object
                                   matchVolume:
                                     description: Represents if a feature is enabled
@@ -7069,6 +7093,9 @@ var CRDsValidation map[string]string = map[string]string{
                             session:
                               description: Base64 encoded session blob.
                               type: string
+                          type: object
+                        snp:
+                          description: AMD SEV-SNP flags defined by the SEV-SNP specifications.
                           type: object
                       type: object
                     machine:
@@ -8502,13 +8529,12 @@ var CRDsValidation map[string]string = map[string]string{
                             description: CustomBlockSize represents the desired logical
                               and physical block size for a VM disk.
                             properties:
+                              discardGranularity:
+                                type: integer
                               logical:
                                 type: integer
                               physical:
                                 type: integer
-                            required:
-                            - logical
-                            - physical
                             type: object
                           matchVolume:
                             description: Represents if a feature is enabled or disabled.
@@ -9221,6 +9247,16 @@ var CRDsValidation map[string]string = map[string]string{
             type: object
           type: array
           x-kubernetes-list-type: atomic
+        ioThreads:
+          description: Optionally specifies the IOThreads options to be used by the
+            instancetype.
+          properties:
+            supplementalPoolThreadCount:
+              description: SupplementalPoolThreadCount specifies how many iothreads
+                are allocated for the supplementalPool policy.
+              format: int32
+              type: integer
+          type: object
         ioThreadsPolicy:
           description: Optionally defines the IOThreadsPolicy to be used by the instancetype.
           type: string
@@ -9250,6 +9286,9 @@ var CRDsValidation map[string]string = map[string]string{
                 session:
                   description: Base64 encoded session blob.
                   type: string
+              type: object
+            snp:
+              description: AMD SEV-SNP flags defined by the SEV-SNP specifications.
               type: object
           type: object
         memory:
@@ -9542,13 +9581,12 @@ var CRDsValidation map[string]string = map[string]string{
                   description: CustomBlockSize represents the desired logical and
                     physical block size for a VM disk.
                   properties:
+                    discardGranularity:
+                      type: integer
                     logical:
                       type: integer
                     physical:
                       type: integer
-                  required:
-                  - logical
-                  - physical
                   type: object
                 matchVolume:
                   description: Represents if a feature is enabled or disabled.
@@ -9945,6 +9983,10 @@ var CRDsValidation map[string]string = map[string]string{
             between cores and sockets, it defaults to 2.
           format: int32
           type: integer
+        preferredArchitecture:
+          description: PreferredArchitecture defines a prefeerred architecture for
+            the VirtualMachine
+          type: string
         preferredSubdomain:
           description: Subdomain of the VirtualMachineInstance
           type: string
@@ -9957,6 +9999,9 @@ var CRDsValidation map[string]string = map[string]string{
           description: Requirements defines the minium amount of instance type defined
             resources required by a set of preferences
           properties:
+            architecture:
+              description: Required Architecture of the VM referencing this preference
+              type: string
             cpu:
               description: Required CPU related attributes of the instancetype.
               properties:
@@ -11620,13 +11665,12 @@ var CRDsValidation map[string]string = map[string]string{
                             description: CustomBlockSize represents the desired logical
                               and physical block size for a VM disk.
                             properties:
+                              discardGranularity:
+                                type: integer
                               logical:
                                 type: integer
                               physical:
                                 type: integer
-                            required:
-                            - logical
-                            - physical
                             type: object
                           matchVolume:
                             description: Represents if a feature is enabled or disabled.
@@ -12530,6 +12574,9 @@ var CRDsValidation map[string]string = map[string]string{
                     session:
                       description: Base64 encoded session blob.
                       type: string
+                  type: object
+                snp:
+                  description: AMD SEV-SNP flags defined by the SEV-SNP specifications.
                   type: object
               type: object
             machine:
@@ -15334,13 +15381,12 @@ var CRDsValidation map[string]string = map[string]string{
                             description: CustomBlockSize represents the desired logical
                               and physical block size for a VM disk.
                             properties:
+                              discardGranularity:
+                                type: integer
                               logical:
                                 type: integer
                               physical:
                                 type: integer
-                            required:
-                            - logical
-                            - physical
                             type: object
                           matchVolume:
                             description: Represents if a feature is enabled or disabled.
@@ -16244,6 +16290,9 @@ var CRDsValidation map[string]string = map[string]string{
                     session:
                       description: Base64 encoded session blob.
                       type: string
+                  type: object
+                snp:
+                  description: AMD SEV-SNP flags defined by the SEV-SNP specifications.
                   type: object
               type: object
             machine:
@@ -17822,13 +17871,12 @@ var CRDsValidation map[string]string = map[string]string{
                                     description: CustomBlockSize represents the desired
                                       logical and physical block size for a VM disk.
                                     properties:
+                                      discardGranularity:
+                                        type: integer
                                       logical:
                                         type: integer
                                       physical:
                                         type: integer
-                                    required:
-                                    - logical
-                                    - physical
                                     type: object
                                   matchVolume:
                                     description: Represents if a feature is enabled
@@ -18745,6 +18793,9 @@ var CRDsValidation map[string]string = map[string]string{
                             session:
                               description: Base64 encoded session blob.
                               type: string
+                          type: object
+                        snp:
+                          description: AMD SEV-SNP flags defined by the SEV-SNP specifications.
                           type: object
                       type: object
                     machine:
@@ -20150,6 +20201,16 @@ var CRDsValidation map[string]string = map[string]string{
             type: object
           type: array
           x-kubernetes-list-type: atomic
+        ioThreads:
+          description: Optionally specifies the IOThreads options to be used by the
+            instancetype.
+          properties:
+            supplementalPoolThreadCount:
+              description: SupplementalPoolThreadCount specifies how many iothreads
+                are allocated for the supplementalPool policy.
+              format: int32
+              type: integer
+          type: object
         ioThreadsPolicy:
           description: Optionally defines the IOThreadsPolicy to be used by the instancetype.
           type: string
@@ -20179,6 +20240,9 @@ var CRDsValidation map[string]string = map[string]string{
                 session:
                   description: Base64 encoded session blob.
                   type: string
+              type: object
+            snp:
+              description: AMD SEV-SNP flags defined by the SEV-SNP specifications.
               type: object
           type: object
         memory:
@@ -20756,6 +20820,15 @@ var CRDsValidation map[string]string = map[string]string{
                                     description: ImageStream is the name of image
                                       stream for import
                                     type: string
+                                  platform:
+                                    description: Platform describes the minimum runtime
+                                      requirements of the image
+                                    properties:
+                                      architecture:
+                                        description: Architecture specifies the image
+                                          target CPU architecture
+                                        type: string
+                                    type: object
                                   pullMethod:
                                     description: PullMethod can be either "pod" (default
                                       import), or "node" (node docker cache based
@@ -20815,6 +20888,11 @@ var CRDsValidation map[string]string = map[string]string{
                                   backingFile:
                                     description: BackingFile is the path to the virtual
                                       hard disk to migrate from vCenter/ESXi
+                                    type: string
+                                  extraArgs:
+                                    description: ExtraArgs is a reference to a ConfigMap
+                                      containing extra arguments to pass directly
+                                      to the VDDK library
                                     type: string
                                   initImageURL:
                                     description: InitImageURL is an optional URL to
@@ -22489,13 +22567,12 @@ var CRDsValidation map[string]string = map[string]string{
                                               the desired logical and physical block
                                               size for a VM disk.
                                             properties:
+                                              discardGranularity:
+                                                type: integer
                                               logical:
                                                 type: integer
                                               physical:
                                                 type: integer
-                                            required:
-                                            - logical
-                                            - physical
                                             type: object
                                           matchVolume:
                                             description: Represents if a feature is
@@ -23434,6 +23511,10 @@ var CRDsValidation map[string]string = map[string]string{
                                     session:
                                       description: Base64 encoded session blob.
                                       type: string
+                                  type: object
+                                snp:
+                                  description: AMD SEV-SNP flags defined by the SEV-SNP
+                                    specifications.
                                   type: object
                               type: object
                             machine:
@@ -24912,13 +24993,12 @@ var CRDsValidation map[string]string = map[string]string{
                   description: CustomBlockSize represents the desired logical and
                     physical block size for a VM disk.
                   properties:
+                    discardGranularity:
+                      type: integer
                     logical:
                       type: integer
                     physical:
                       type: integer
-                  required:
-                  - logical
-                  - physical
                   type: object
                 matchVolume:
                   description: Represents if a feature is enabled or disabled.
@@ -25315,6 +25395,10 @@ var CRDsValidation map[string]string = map[string]string{
             between cores and sockets, it defaults to 2.
           format: int32
           type: integer
+        preferredArchitecture:
+          description: PreferredArchitecture defines a prefeerred architecture for
+            the VirtualMachine
+          type: string
         preferredSubdomain:
           description: Subdomain of the VirtualMachineInstance
           type: string
@@ -25327,6 +25411,9 @@ var CRDsValidation map[string]string = map[string]string{
           description: Requirements defines the minium amount of instance type defined
             resources required by a set of preferences
           properties:
+            architecture:
+              description: Required Architecture of the VM referencing this preference
+              type: string
             cpu:
               description: Required CPU related attributes of the instancetype.
               properties:
@@ -26093,6 +26180,15 @@ var CRDsValidation map[string]string = map[string]string{
                                         description: ImageStream is the name of image
                                           stream for import
                                         type: string
+                                      platform:
+                                        description: Platform describes the minimum
+                                          runtime requirements of the image
+                                        properties:
+                                          architecture:
+                                            description: Architecture specifies the
+                                              image target CPU architecture
+                                            type: string
+                                        type: object
                                       pullMethod:
                                         description: PullMethod can be either "pod"
                                           (default import), or "node" (node docker
@@ -26156,6 +26252,11 @@ var CRDsValidation map[string]string = map[string]string{
                                       backingFile:
                                         description: BackingFile is the path to the
                                           virtual hard disk to migrate from vCenter/ESXi
+                                        type: string
+                                      extraArgs:
+                                        description: ExtraArgs is a reference to a
+                                          ConfigMap containing extra arguments to
+                                          pass directly to the VDDK library
                                         type: string
                                       initImageURL:
                                         description: InitImageURL is an optional URL
@@ -27849,13 +27950,12 @@ var CRDsValidation map[string]string = map[string]string{
                                                   the desired logical and physical
                                                   block size for a VM disk.
                                                 properties:
+                                                  discardGranularity:
+                                                    type: integer
                                                   logical:
                                                     type: integer
                                                   physical:
                                                     type: integer
-                                                required:
-                                                - logical
-                                                - physical
                                                 type: object
                                               matchVolume:
                                                 description: Represents if a feature
@@ -28802,6 +28902,10 @@ var CRDsValidation map[string]string = map[string]string{
                                         session:
                                           description: Base64 encoded session blob.
                                           type: string
+                                      type: object
+                                    snp:
+                                      description: AMD SEV-SNP flags defined by the
+                                        SEV-SNP specifications.
                                       type: object
                                   type: object
                                 machine:
@@ -30271,13 +30375,12 @@ var CRDsValidation map[string]string = map[string]string{
                                           desired logical and physical block size
                                           for a VM disk.
                                         properties:
+                                          discardGranularity:
+                                            type: integer
                                           logical:
                                             type: integer
                                           physical:
                                             type: integer
-                                        required:
-                                        - logical
-                                        - physical
                                         type: object
                                       matchVolume:
                                         description: Represents if a feature is enabled

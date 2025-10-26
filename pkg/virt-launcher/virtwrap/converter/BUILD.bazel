@@ -25,6 +25,7 @@ go_library(
         "//pkg/network/vmispec:go_default_library",
         "//pkg/os/disk:go_default_library",
         "//pkg/pointer:go_default_library",
+        "//pkg/safepath:go_default_library",
         "//pkg/storage/reservation:go_default_library",
         "//pkg/storage/types:go_default_library",
         "//pkg/tpm:go_default_library",
@@ -59,6 +60,7 @@ go_test(
         "testdata/domain_x86_64_root.xml.tmpl",
         "testdata/domain_s390x.xml.tmpl",
     ],
+    race = "on",
     deps = [
         "//pkg/config:go_default_library",
         "//pkg/defaults:go_default_library",

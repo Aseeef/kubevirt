@@ -98,6 +98,7 @@ nogo(
 
 # gazelle:prefix kubevirt.io/kubevirt
 # gazelle:build_tags selinux
+# gazelle:proto disable_global
 # gazelle:resolve go golang.org/x/tools/go/analysis @org_golang_x_tools//go/analysis:go_default_library
 gazelle(
     name = "gazelle",
@@ -244,13 +245,13 @@ oci_push(
 
 oci_push(
     name = "push-virt-synchronization-controller",
-    image = "//cmd/synchronization-controller:synchronization-controller-image",
+    image = "//cmd/synchronization-controller:virt-synchronization-controller-image",
     repository = "quay.io/kubevirt/virt-synchronization-controller",
 )
 
 oci_push(
     name = "push-pr-helper",
-    image = "//cmd/pr-helper:pr-helper",
+    image = "//cmd/pr-helper:pr-helper-image",
     repository = "quay.io/kubevirt/pr-helper",
 )
 

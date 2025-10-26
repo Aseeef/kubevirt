@@ -40,7 +40,7 @@ other_images_x86_64_aarch64="
     //cmd/sidecars/network-slirp-binding:network-slirp-binding-image
     //cmd/sidecars/network-passt-binding:network-passt-binding-image
     //cmd/cniplugins/passt-binding/cmd:network-passt-binding-cni-image
-    //cmd/pr-helper:pr-helper
+    //cmd/pr-helper:pr-helper-image
     //containerimages:cirros-container-disk-image
     //containerimages:cirros-custom-container-disk-image
     //containerimages:virtio-container-disk-image
@@ -78,12 +78,12 @@ bazel build \
     --define container_tag= \
     //cmd/virt-operator:virt-operator-image //cmd/virt-api:virt-api-image //cmd/virt-controller:virt-controller-image \
     //cmd/virt-handler:virt-handler-image //cmd/virt-launcher:virt-launcher-image //cmd/virt-exportproxy:virt-exportproxy-image \
-    //cmd/virt-exportserver:virt-exportserver-image //cmd/synchronization-controller:synchronization-controller-image ${other_images[@]}
+    //cmd/virt-exportserver:virt-exportserver-image //cmd/synchronization-controller:virt-synchronization-controller-image ${other_images[@]}
 
 rm -rf ${DIGESTS_DIR}/${ARCHITECTURE}
 mkdir -p ${DIGESTS_DIR}/${ARCHITECTURE}
 
-for f in $(find bazel-bin/ -name '*.digest'); do
+for f in $(find bazel-bin/ -name '*.json.sha256' | grep -v 'version-container'); do
     dir=${DIGESTS_DIR}/${ARCHITECTURE}/$(dirname $f)
     mkdir -p ${dir}
     cp -f ${f} ${dir}/$(basename ${f})

@@ -459,9 +459,10 @@ var _ = Describe("Template", func() {
 				Expect(pod.Spec.Containers).To(HaveLen(2))
 				Expect(pod.Spec.Containers[0].Image).To(Equal("kubevirt/virt-launcher"))
 				Expect(pod.ObjectMeta.Labels).To(Equal(map[string]string{
-					v1.AppLabel:                "virt-launcher",
-					v1.CreatedByLabel:          "1234",
-					v1.VirtualMachineNameLabel: "testvmi",
+					v1.AppLabel:                          "virt-launcher",
+					v1.CreatedByLabel:                    "1234",
+					v1.DeprecatedVirtualMachineNameLabel: "testvmi",
+					v1.VirtualMachineInstanceIDLabel:     "testvmi",
 				}))
 				Expect(pod.ObjectMeta.Annotations).To(Equal(map[string]string{
 					v1.DomainAnnotation:                                  "testvmi",
@@ -520,6 +521,23 @@ var _ = Describe("Template", func() {
 				Entry("on amd64", "amd64", "/usr/share/OVMF"),
 				Entry("on arm64", "arm64", "/usr/share/AAVMF"),
 			)
+
+			It("Should have a stable label to select virt-launcher pods", func() {
+				const (
+					testNamespace = "test"
+					longVMIName   = "a-very-very-long-virtual-machine-instance-name-used-for-testing-this-logic"
+				)
+
+				pod, err := svc.RenderLaunchManifest(
+					libvmi.New(
+						libvmi.WithNamespace(testNamespace),
+						libvmi.WithName(longVMIName),
+					))
+				Expect(err).NotTo(HaveOccurred())
+
+				const expectedVMIIDLabelValue = "a-very-very-long-virtual-machine-instance-name-used-fo-88ed080c"
+				Expect(pod.ObjectMeta.Labels).To(HaveKeyWithValue(v1.VirtualMachineInstanceIDLabel, expectedVMIIDLabelValue))
+			})
 		})
 		Context("with SELinux types", func() {
 			It("should be nil if no SELinux type is specified and none is needed", func() {
@@ -1055,9 +1073,10 @@ var _ = Describe("Template", func() {
 				Expect(pod.Spec.Containers[0].Image).To(Equal("kubevirt/virt-launcher"))
 
 				Expect(pod.ObjectMeta.Labels).To(Equal(map[string]string{
-					v1.AppLabel:                "virt-launcher",
-					v1.CreatedByLabel:          "1234",
-					v1.VirtualMachineNameLabel: "testvmi",
+					v1.AppLabel:                          "virt-launcher",
+					v1.CreatedByLabel:                    "1234",
+					v1.DeprecatedVirtualMachineNameLabel: "testvmi",
+					v1.VirtualMachineInstanceIDLabel:     "testvmi",
 				}))
 				Expect(pod.ObjectMeta.GenerateName).To(Equal("virt-launcher-testvmi-"))
 				Expect(pod.Spec.NodeSelector).To(Equal(map[string]string{
@@ -1270,7 +1289,18 @@ var _ = Describe("Template", func() {
 					Expect(pod.Spec.NodeSelector).To(HaveKeyWithValue(v1.SEVESLabel, "true"))
 				})
 
-				DescribeTable("should not add SEV-ES node label selector", func(policy *v1.SEVPolicy) {
+				It("should add SEV and SEV-SNP node label selector with SEV-SNP workload", func() {
+					vmi.Spec.Domain.LaunchSecurity = &v1.LaunchSecurity{
+						SNP: &v1.SEVSNP{},
+					}
+
+					pod, err := svc.RenderLaunchManifest(vmi)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(pod.Spec.NodeSelector).To(HaveKeyWithValue(v1.SEVLabel, "true"))
+					Expect(pod.Spec.NodeSelector).To(HaveKeyWithValue(v1.SEVSNPLabel, "true"))
+				})
+
+				DescribeTable("should not add SEV-ES or SEV-SNP node label selector", func(policy *v1.SEVPolicy) {
 					vmi.Spec.Domain.LaunchSecurity = &v1.LaunchSecurity{
 						SEV: &v1.SEV{
 							Policy: policy,
@@ -1279,11 +1309,20 @@ var _ = Describe("Template", func() {
 					pod, err := svc.RenderLaunchManifest(vmi)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(pod.Spec.NodeSelector).To(Not(HaveKey(ContainSubstring(v1.SEVESLabel))))
+					Expect(pod.Spec.NodeSelector).To(Not(HaveKey(ContainSubstring(v1.SEVSNPLabel))))
 				},
 					Entry("when no SEV policy is set", &v1.SEVPolicy{}),
 					Entry("when no SEV-ES policy bit is set", &v1.SEVPolicy{EncryptedState: nil}),
 					Entry("when SEV-ES policy bit is set to false", &v1.SEVPolicy{EncryptedState: pointer.P(false)}),
 				)
+
+				It("should not add SEV-SNP node label selector when no SEV-SNP workload", func() {
+					vmi.Spec.Domain.LaunchSecurity = &v1.LaunchSecurity{}
+
+					pod, err := svc.RenderLaunchManifest(vmi)
+					Expect(err).ToNot(HaveOccurred())
+					Expect(pod.Spec.NodeSelector).To(Not(HaveKey(ContainSubstring(v1.SEVSNPLabel))))
+				})
 			})
 
 			Context("When scheduling Secure Execution workloads", func() {
@@ -1874,11 +1913,12 @@ var _ = Describe("Template", func() {
 
 				Expect(pod.Labels).To(Equal(
 					map[string]string{
-						"key1":                     "val1",
-						"key2":                     "val2",
-						v1.AppLabel:                "virt-launcher",
-						v1.CreatedByLabel:          "1234",
-						v1.VirtualMachineNameLabel: "testvmi",
+						"key1":                               "val1",
+						"key2":                               "val2",
+						v1.AppLabel:                          "virt-launcher",
+						v1.CreatedByLabel:                    "1234",
+						v1.DeprecatedVirtualMachineNameLabel: "testvmi",
+						v1.VirtualMachineInstanceIDLabel:     "testvmi",
 					},
 				))
 			})
@@ -4338,14 +4378,14 @@ var _ = Describe("Template", func() {
 						Namespace: "default",
 						UID:       "1234",
 						Labels: map[string]string{
-							v1.VirtualMachineNameLabel: "random_name",
+							v1.DeprecatedVirtualMachineNameLabel: "random_name",
 						},
 					},
 				}
 
 				pod, err := svc.RenderLaunchManifest(&vmi)
 				Expect(err).ToNot(HaveOccurred())
-				vmNameLabel, ok := pod.Labels[v1.VirtualMachineNameLabel]
+				vmNameLabel, ok := pod.Labels[v1.DeprecatedVirtualMachineNameLabel]
 				Expect(ok).To(BeTrue())
 				Expect(vmNameLabel).To(Equal(vmi.Name))
 			})
@@ -4366,7 +4406,7 @@ var _ = Describe("Template", func() {
 					pod, err := svc.RenderLaunchManifest(&vmi)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(pod.Spec.Containers).To(HaveLen(1))
-					vmNameLabel, ok := pod.Labels[v1.VirtualMachineNameLabel]
+					vmNameLabel, ok := pod.Labels[v1.DeprecatedVirtualMachineNameLabel]
 					Expect(ok).To(BeTrue())
 					Expect(vmNameLabel).To(Equal(vmi.Name))
 				})
@@ -4388,7 +4428,7 @@ var _ = Describe("Template", func() {
 					pod, err := svc.RenderLaunchManifest(&vmi)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(pod.Spec.Containers).To(HaveLen(1))
-					vmNameLabel, ok := pod.Labels[v1.VirtualMachineNameLabel]
+					vmNameLabel, ok := pod.Labels[v1.DeprecatedVirtualMachineNameLabel]
 					Expect(ok).To(BeTrue())
 					Expect(vmNameLabel).To(Equal(name[:validation.DNS1123LabelMaxLength]))
 				})
@@ -5215,8 +5255,9 @@ var _ = Describe("Template", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pod).ToNot(BeNil())
 			containGCL := ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
-				"Name":          Equal("guest-console-log"),
-				"RestartPolicy": Equal(pointer.P(k8sv1.ContainerRestartPolicyAlways)),
+				"Name":            Equal("guest-console-log"),
+				"RestartPolicy":   Equal(pointer.P(k8sv1.ContainerRestartPolicyAlways)),
+				"ImagePullPolicy": Equal(config.GetImagePullPolicy()),
 			}))
 			if expected {
 				Expect(pod.Spec.InitContainers).To(containGCL)

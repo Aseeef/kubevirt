@@ -476,7 +476,7 @@ func GetMemoryOverhead(vmi *v1.VirtualMachineInstance, cpuArch string, additiona
 
 	// Consider memory overhead for SEV guests.
 	// Additional information can be found here: https://libvirt.org/kbase/launch_security_sev.html#memory
-	if util.IsSEVVMI(vmi) {
+	if util.IsSEVVMI(vmi) || util.IsSEVSNPVMI(vmi) || util.IsSEVESVMI(vmi) {
 		overhead.Add(resource.MustParse("256Mi"))
 	}
 
@@ -611,7 +611,7 @@ func validatePermittedHostDevices(spec *v1.VirtualMachineInstanceSpec, config *v
 	}
 
 	if len(errors) != 0 {
-		return fmt.Errorf(strings.Join(errors, " "))
+		return fmt.Errorf("%s", strings.Join(errors, " "))
 	}
 
 	return nil

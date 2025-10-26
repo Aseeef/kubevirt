@@ -32,6 +32,8 @@ import (
 	gomegaTypes "github.com/onsi/gomega/types"
 	"go.uber.org/mock/gomock"
 
+	"kubevirt.io/kubevirt/tests/framework/matcher"
+
 	k8sv1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -208,7 +210,7 @@ var _ = Describe("VirtualMachineInstance watcher", func() {
 
 		config, _, kvStore = testutils.NewFakeClusterConfigUsingKVConfig(kubevirtFakeConfig)
 		pvcInformer, _ := testutils.NewFakeInformerFor(&k8sv1.PersistentVolumeClaim{})
-		migrationInformer, _ := testutils.NewFakeInformerFor(&virtv1.VirtualMachineInstanceMigration{})
+		migrationInformer, _ := testutils.NewFakeInformerWithIndexersFor(&virtv1.VirtualMachineInstanceMigration{}, kvcontroller.GetVirtualMachineInstanceMigrationInformerIndexers())
 		storageClassInformer, _ := testutils.NewFakeInformerFor(&storagev1.StorageClass{})
 		storageClassStore = storageClassInformer.GetStore()
 		cdiInformer, _ := testutils.NewFakeInformerFor(&cdiv1.CDIConfig{})
@@ -242,6 +244,8 @@ var _ = Describe("VirtualMachineInstance watcher", func() {
 			stubNetStatusUpdate,
 			validateNetVMISpecStub(),
 			stubMigrationEvaluator{result: k8sv1.ConditionUnknown},
+			[]string{},
+			[]string{},
 		)
 		// Wrap our workqueue to have a way to detect when we are done processing updates
 		mockQueue = testutils.NewMockWorkQueue(controller.Queue)
@@ -2019,19 +2023,38 @@ var _ = Describe("VirtualMachineInstance watcher", func() {
 		})
 
 		Context("should update pod annotations and labels", func() {
+			var (
+				initialAdditionalLauncherAnnotationsSync []string
+				initialAdditionalLauncherLabelsSync      []string
+			)
+
+			BeforeEach(func() {
+				initialAdditionalLauncherAnnotationsSync = controller.additionalLauncherAnnotationsSync
+				initialAdditionalLauncherLabelsSync = controller.additionalLauncherLabelsSync
+			})
+
+			AfterEach(func() {
+				controller.additionalLauncherAnnotationsSync = initialAdditionalLauncherAnnotationsSync
+				controller.additionalLauncherLabelsSync = initialAdditionalLauncherLabelsSync
+			})
 
 			type testData struct {
-				vmiAnnotations      map[string]string
-				podAnnotations      map[string]string
-				vmiLabels           map[string]string
-				podLabels           map[string]string
-				expectedPatch       bool
-				expectedAnnotations map[string]string
-				expectedLabels      map[string]string
+				vmiAnnotations                    map[string]string
+				podAnnotations                    map[string]string
+				vmiLabels                         map[string]string
+				podLabels                         map[string]string
+				expectedPatch                     bool
+				expectedAnnotations               map[string]string
+				expectedLabels                    map[string]string
+				additionalLauncherAnnotationsSync []string
+				additionalLauncherLabelsSync      []string
 			}
 			DescribeTable("when VMI dynamic annotations and label sets changes", func(td *testData) {
 				vmi := newPendingVirtualMachine("testvmi")
 				vmi.Status.Phase = virtv1.Running
+
+				controller.additionalLauncherAnnotationsSync = td.additionalLauncherAnnotationsSync
+				controller.additionalLauncherLabelsSync = td.additionalLauncherLabelsSync
 
 				pod := newPodForVirtualMachine(vmi, k8sv1.PodRunning)
 
@@ -2260,6 +2283,48 @@ var _ = Describe("VirtualMachineInstance watcher", func() {
 						expectedPatch: true,
 					},
 				),
+				Entry("when VMI and pod custom annotations differ",
+					&testData{
+						vmiAnnotations: map[string]string{
+							"custom/annotation": "false",
+						},
+						podAnnotations: map[string]string{
+							"custom/annotation": "true",
+						},
+						expectedLabels: map[string]string{
+							"kubevirt.io":            "virt-launcher",
+							"kubevirt.io/created-by": "1234",
+						},
+						expectedAnnotations: map[string]string{
+							"kubevirt.io/domain":            "testvmi",
+							descheduler.EvictOnlyAnnotation: "",
+							"custom/annotation":             "false",
+						},
+						expectedPatch:                     true,
+						additionalLauncherAnnotationsSync: []string{"custom/annotation"},
+					},
+				),
+				Entry("when VMI and pod custom labels differ",
+					&testData{
+						vmiLabels: map[string]string{
+							"custom/label": "node2",
+						},
+						podLabels: map[string]string{
+							"custom/label": "node1",
+						},
+						expectedAnnotations: map[string]string{
+							"kubevirt.io/domain":            "testvmi",
+							descheduler.EvictOnlyAnnotation: "",
+						},
+						expectedLabels: map[string]string{
+							"kubevirt.io":            "virt-launcher",
+							"kubevirt.io/created-by": "1234",
+							"custom/label":           "node2",
+						},
+						expectedPatch:                true,
+						additionalLauncherLabelsSync: []string{"custom/label"},
+					},
+				),
 			)
 		})
 
@@ -2315,6 +2380,68 @@ var _ = Describe("VirtualMachineInstance watcher", func() {
 				updatedPod, err := kubeClient.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(updatedPod.Annotations).ToNot(HaveKey(descheduler.EvictionInProgressAnnotation))
+			})
+		})
+
+		Context("Eviction condition", func() {
+			It("should set VirtualMachineInstanceEvictionRequested condition when VMI is marked for eviction", func() {
+				vmi := newPendingVirtualMachine("testvmi")
+				vmi.Status.Phase = virtv1.Running
+				vmi.Status.EvacuationNodeName = "test"
+				vmi.Status.NodeName = "test"
+
+				pod := newPodForVirtualMachine(vmi, k8sv1.PodRunning)
+				addActivePods(vmi, pod.UID, "")
+				addVirtualMachine(vmi)
+				addPod(pod)
+
+				sanityExecute()
+
+				updatedVmi, err := virtClientset.KubevirtV1().VirtualMachineInstances(vmi.Namespace).Get(context.Background(), vmi.Name, metav1.GetOptions{})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(updatedVmi).To(matcher.HaveConditionTrueWithReason(virtv1.VirtualMachineInstanceEvictionRequested, virtv1.VirtualMachineInstanceReasonEvictionRequested))
+			})
+
+			It("should remove VirtualMachineInstanceEvictionRequested condition when VMI is not marked for eviction", func() {
+				vmi := newPendingVirtualMachine("testvmi")
+				vmi.Status.Phase = virtv1.Running
+				vmi.Status.EvacuationNodeName = ""
+
+				// Add the condition first
+				kvcontroller.NewVirtualMachineInstanceConditionManager().UpdateCondition(vmi, &virtv1.VirtualMachineInstanceCondition{
+					Type:    virtv1.VirtualMachineInstanceEvictionRequested,
+					Status:  k8sv1.ConditionTrue,
+					Reason:  virtv1.VirtualMachineInstanceReasonEvictionRequested,
+					Message: "VMI is marked for eviction",
+				})
+
+				pod := newPodForVirtualMachine(vmi, k8sv1.PodRunning)
+				addActivePods(vmi, pod.UID, "")
+				addVirtualMachine(vmi)
+				addPod(pod)
+
+				sanityExecute()
+
+				updatedVmi, err := virtClientset.KubevirtV1().VirtualMachineInstances(vmi.Namespace).Get(context.Background(), vmi.Name, metav1.GetOptions{})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(updatedVmi).To(matcher.HaveConditionMissingOrFalse(virtv1.VirtualMachineInstanceEvictionRequested))
+			})
+
+			It("should not set VirtualMachineInstanceEvictionRequested condition when VMI is not marked for eviction", func() {
+				vmi := newPendingVirtualMachine("testvmi")
+				vmi.Status.Phase = virtv1.Running
+				vmi.Status.EvacuationNodeName = ""
+
+				pod := newPodForVirtualMachine(vmi, k8sv1.PodRunning)
+				addActivePods(vmi, pod.UID, "")
+				addVirtualMachine(vmi)
+				addPod(pod)
+
+				sanityExecute()
+
+				updatedVmi, err := virtClientset.KubevirtV1().VirtualMachineInstances(vmi.Namespace).Get(context.Background(), vmi.Name, metav1.GetOptions{})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(updatedVmi).To(matcher.HaveConditionMissingOrFalse(virtv1.VirtualMachineInstanceEvictionRequested))
 			})
 		})
 
@@ -2432,7 +2559,7 @@ var _ = Describe("VirtualMachineInstance watcher", func() {
 		It("Should find vmi, from virt-launcher pod", func() {
 			vmi := newPendingVirtualMachine("testvmi")
 			pod := newPodForVirtualMachine(vmi, k8sv1.PodRunning)
-			controllerRef := kvcontroller.GetControllerOf(pod)
+			controllerRef := metav1.GetControllerOf(pod)
 			addVirtualMachine(vmi)
 
 			result := controller.resolveControllerRef(k8sv1.NamespaceDefault, controllerRef)
@@ -2443,7 +2570,7 @@ var _ = Describe("VirtualMachineInstance watcher", func() {
 			vmi := newPendingVirtualMachine("testvmi")
 			pod := newPodForVirtualMachine(vmi, k8sv1.PodRunning)
 			attachmentPod := newPodForVirtlauncher(pod, "hp-test", "abcd", k8sv1.PodRunning)
-			controllerRef := kvcontroller.GetControllerOf(attachmentPod)
+			controllerRef := metav1.GetControllerOf(attachmentPod)
 			addVirtualMachine(vmi)
 			addPod(pod)
 
@@ -4249,6 +4376,9 @@ func newPodForVirtualMachine(vmi *virtv1.VirtualMachineInstance, phase k8sv1.Pod
 				virtv1.CreatedByLabel: string(vmi.UID),
 			},
 			Annotations: podAnnotations,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(vmi, virtv1.VirtualMachineInstanceGroupVersionKind),
+			},
 		},
 		Status: k8sv1.PodStatus{
 			Phase: phase,

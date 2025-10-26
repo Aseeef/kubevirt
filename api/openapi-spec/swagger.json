@@ -13279,20 +13279,18 @@
    "v1.CustomBlockSize": {
     "description": "CustomBlockSize represents the desired logical and physical block size for a VM disk.",
     "type": "object",
-    "required": [
-     "logical",
-     "physical"
-    ],
     "properties": {
+     "discardGranularity": {
+      "type": "integer",
+      "format": "int32"
+     },
      "logical": {
       "type": "integer",
-      "format": "int32",
-      "default": 0
+      "format": "int32"
      },
      "physical": {
       "type": "integer",
-      "format": "int32",
-      "default": 0
+      "format": "int32"
      }
     }
    },
@@ -15259,6 +15257,10 @@
      "sev": {
       "description": "AMD Secure Encrypted Virtualization (SEV).",
       "$ref": "#/definitions/v1.SEV"
+     },
+     "snp": {
+      "description": "AMD SEV-SNP flags defined by the SEV-SNP specifications.",
+      "$ref": "#/definitions/v1.SEVSNP"
      }
     }
    },
@@ -16308,6 +16310,9 @@
       "type": "boolean"
      }
     }
+   },
+   "v1.SEVSNP": {
+    "type": "object"
    },
    "v1.SEVSecretOptions": {
     "description": "SEVSecretOptions is used to provide a secret for a running guest.",
@@ -19405,6 +19410,10 @@
       "description": "ImageStream is the name of image stream for import",
       "type": "string"
      },
+     "platform": {
+      "description": "Platform describes the minimum runtime requirements of the image",
+      "$ref": "#/definitions/v1beta1.PlatformOptions"
+     },
      "pullMethod": {
       "description": "PullMethod can be either \"pod\" (default import), or \"node\" (node docker cache based import)",
       "type": "string"
@@ -19471,6 +19480,10 @@
     "properties": {
      "backingFile": {
       "description": "BackingFile is the path to the virtual hard disk to migrate from vCenter/ESXi",
+      "type": "string"
+     },
+     "extraArgs": {
+      "description": "ExtraArgs is a reference to a ConfigMap containing extra arguments to pass directly to the VDDK library",
       "type": "string"
      },
      "initImageURL": {
@@ -19778,9 +19791,22 @@
      }
     }
    },
+   "v1beta1.PlatformOptions": {
+    "type": "object",
+    "properties": {
+     "architecture": {
+      "description": "Architecture specifies the image target CPU architecture",
+      "type": "string"
+     }
+    }
+   },
    "v1beta1.PreferenceRequirements": {
     "type": "object",
     "properties": {
+     "architecture": {
+      "description": "Required Architecture of the VM referencing this preference",
+      "type": "string"
+     },
      "cpu": {
       "description": "Required CPU related attributes of the instancetype.",
       "$ref": "#/definitions/v1beta1.CPUPreferenceRequirement"
@@ -20512,6 +20538,10 @@
       },
       "x-kubernetes-list-type": "atomic"
      },
+     "ioThreads": {
+      "description": "Optionally specifies the IOThreads options to be used by the instancetype.",
+      "$ref": "#/definitions/v1.DiskIOThreads"
+     },
      "ioThreadsPolicy": {
       "description": "Optionally defines the IOThreadsPolicy to be used by the instancetype.",
       "type": "string"
@@ -20634,6 +20664,10 @@
       "description": "PreferSpreadSocketToCoreRatio defines the ratio to spread vCPUs between cores and sockets, it defaults to 2.",
       "type": "integer",
       "format": "int64"
+     },
+     "preferredArchitecture": {
+      "description": "PreferredArchitecture defines a prefeerred architecture for the VirtualMachine",
+      "type": "string"
      },
      "preferredSubdomain": {
       "description": "Subdomain of the VirtualMachineInstance",

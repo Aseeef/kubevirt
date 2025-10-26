@@ -134,6 +134,7 @@ type DeviceController struct {
 	stop                chan struct{}
 	mdevTypesManager    *MDEVTypesManager
 	clientset           k8scli.CoreV1Interface
+	mdevRefreshWG       *sync.WaitGroup
 }
 
 func NewDeviceController(
@@ -159,6 +160,7 @@ func NewDeviceController(
 		virtConfig:       clusterConfig,
 		mdevTypesManager: NewMDEVTypesManager(),
 		clientset:        clientset,
+		mdevRefreshWG:    &sync.WaitGroup{},
 	}
 
 	return controller
@@ -333,6 +335,7 @@ func (c *DeviceController) refreshMediatedDeviceTypes() bool {
 }
 
 func (c *DeviceController) refreshPermittedDevices() {
+	c.mdevRefreshWG.Add(1)
 	logger := log.DefaultLogger()
 	var debugDevAdded []string
 	var debugDevRemoved []string
@@ -367,6 +370,7 @@ func (c *DeviceController) refreshPermittedDevices() {
 	if len(debugDevRemoved) > 0 {
 		logger.Infof("disabled device-plugins for: %v", debugDevRemoved)
 	}
+	c.mdevRefreshWG.Done()
 }
 
 func (c *DeviceController) startDevice(resourceName string, dev Device) {
@@ -417,6 +421,10 @@ func (c *DeviceController) Run(stop chan struct{}) {
 			c.stopDevice(name)
 		}
 	}()
+
+	// wait for any concurrent mdev refreshes to finish
+	c.mdevRefreshWG.Wait()
+
 	logger.Info("Shutting down device plugin controller")
 }
 

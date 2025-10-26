@@ -127,6 +127,8 @@ var _ = Describe("getOptimalBlockIO", func() {
 		// we create a disk image and filesystem just for this test.
 		// For now, as long as we have a value, the exact value doesn't matter.
 		Expect(blockIO.LogicalBlockSize).ToNot(BeZero())
+		Expect(blockIO.DiscardGranularity).ToNot(BeNil())
+		Expect(*blockIO.DiscardGranularity).To(Equal(blockIO.LogicalBlockSize))
 	})
 
 	It("Should fail for non-file or non-block devices", func() {
@@ -379,15 +381,16 @@ var _ = Describe("Converter", func() {
 			kubevirtDisk := &v1.Disk{
 				BlockSize: &v1.BlockSize{
 					Custom: &v1.CustomBlockSize{
-						Logical:  1234,
-						Physical: 1234,
+						Logical:            1234,
+						Physical:           1234,
+						DiscardGranularity: pointer.P[uint](1234),
 					},
 				},
 			}
 			expectedXML := `<Disk device="" type="">
   <source></source>
   <target></target>
-  <blockio logical_block_size="1234" physical_block_size="1234"></blockio>
+  <blockio logical_block_size="1234" physical_block_size="1234" discard_granularity="1234"></blockio>
 </Disk>`
 			libvirtDisk := &api.Disk{}
 			Expect(Convert_v1_BlockSize_To_api_BlockIO(kubevirtDisk, libvirtDisk)).To(Succeed())
@@ -3520,6 +3523,18 @@ var _ = Describe("Converter", func() {
 			Expect(domain.Spec.LaunchSecurity).ToNot(BeNil())
 			Expect(domain.Spec.LaunchSecurity.Type).To(Equal("sev"))
 			Expect(domain.Spec.LaunchSecurity.Policy).To(Equal("0x" + strconv.FormatUint(uint64(sev.SEVPolicyNoDebug|sev.SEVPolicyEncryptedState), 16)))
+		})
+
+		It("should set LaunchSecurity domain element with 'sev-snp' type with 'Reserved' policy bits", func() {
+			// VMI with SEV-SNP
+			vmi.Spec.Domain.LaunchSecurity = &v1.LaunchSecurity{
+				SNP: &v1.SEVSNP{},
+			}
+			domain := vmiToDomain(vmi, c)
+			Expect(domain).ToNot(BeNil())
+			Expect(domain.Spec.LaunchSecurity).ToNot(BeNil())
+			Expect(domain.Spec.LaunchSecurity.Type).To(Equal("sev-snp"))
+			Expect(domain.Spec.LaunchSecurity.Policy).To(Equal("0x" + strconv.FormatUint(uint64(sev.SNPPolicySmt|sev.SNPPolicyReserved), 16)))
 		})
 
 		It("should set IOMMU attribute of the RngDriver", func() {

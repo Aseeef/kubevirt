@@ -779,8 +779,9 @@ type BackingStoreFormat struct {
 }
 
 type BlockIO struct {
-	LogicalBlockSize  uint `xml:"logical_block_size,attr,omitempty"`
-	PhysicalBlockSize uint `xml:"physical_block_size,attr,omitempty"`
+	LogicalBlockSize   uint  `xml:"logical_block_size,attr,omitempty"`
+	PhysicalBlockSize  uint  `xml:"physical_block_size,attr,omitempty"`
+	DiscardGranularity *uint `xml:"discard_granularity,attr,omitempty"`
 }
 
 type Reservations struct {
@@ -1079,11 +1080,11 @@ type Entry struct {
 
 type LaunchSecurity struct {
 	Type            string `xml:"type,attr"`
+	DHCert          string `xml:"dhCert,omitempty"`
+	Session         string `xml:"session,omitempty"`
 	Cbitpos         string `xml:"cbitpos,omitempty"`
 	ReducedPhysBits string `xml:"reducedPhysBits,omitempty"`
 	Policy          string `xml:"policy,omitempty"`
-	DHCert          string `xml:"dhCert,omitempty"`
-	Session         string `xml:"session,omitempty"`
 }
 
 //END LaunchSecurity --------------------

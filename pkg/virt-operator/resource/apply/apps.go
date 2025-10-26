@@ -64,7 +64,7 @@ func (r *Reconciler) syncDeployment(origDeployment *appsv1.Deployment) (*appsv1.
 	} else if deployment.Name == components.VirtAPIName && !replicasAlreadyPatched(r.kv.Spec.CustomizeComponents.Patches, components.VirtAPIName) {
 		replicas, err := getDesiredApiReplicas(r.clientset)
 		if err != nil {
-			log.Log.Object(deployment).Warningf(err.Error())
+			log.Log.Object(deployment).Warningf("%s", err.Error())
 		} else {
 			deployment.Spec.Replicas = pointer.P(replicas)
 		}
@@ -391,7 +391,9 @@ func (r *Reconciler) syncPodDisruptionBudgetForDeployment(deployment *appsv1.Dep
 }
 
 func getDesiredApiReplicas(clientset kubecli.KubevirtClient) (replicas int32, err error) {
-	nodeList, err := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	nodeList, err := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", v1.NodeSchedulable, "true"),
+	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to get number of nodes to determine virt-api replicas: %v", err)
 	}
@@ -423,13 +425,13 @@ func replicasAlreadyPatched(patches []v1.CustomizeComponentsPatch, deploymentNam
 		}
 		decodedPatch, err := jsonpatch.DecodePatch([]byte(patch.Patch))
 		if err != nil {
-			log.Log.Warningf(err.Error())
+			log.Log.Warningf("%s", err.Error())
 			continue
 		}
 		for _, operation := range decodedPatch {
 			path, err := operation.Path()
 			if err != nil {
-				log.Log.Warningf(err.Error())
+				log.Log.Warningf("%s", err.Error())
 				continue
 			}
 			op := operation.Kind()
