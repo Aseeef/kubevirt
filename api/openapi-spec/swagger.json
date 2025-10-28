@@ -11674,7 +11674,7 @@
       "$ref": "#/definitions/k8s.io.apimachinery.pkg.apis.meta.v1.LabelSelector"
      },
      "matchLabelKeys": {
-      "description": "MatchLabelKeys is a set of pod label keys to select which pods will be taken into consideration. The keys are used to lookup values from the incoming pod labels, those key-value labels are merged with `labelSelector` as `key in (value)` to select the group of existing pods which pods will be taken into consideration for the incoming pod's pod (anti) affinity. Keys that don't exist in the incoming pod labels will be ignored. The default value is empty. The same key is forbidden to exist in both matchLabelKeys and labelSelector. Also, matchLabelKeys cannot be set when labelSelector isn't set. This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).",
+      "description": "MatchLabelKeys is a set of pod label keys to select which pods will be taken into consideration. The keys are used to lookup values from the incoming pod labels, those key-value labels are merged with `labelSelector` as `key in (value)` to select the group of existing pods which pods will be taken into consideration for the incoming pod's pod (anti) affinity. Keys that don't exist in the incoming pod labels will be ignored. The default value is empty. The same key is forbidden to exist in both matchLabelKeys and labelSelector. Also, matchLabelKeys cannot be set when labelSelector isn't set.",
       "type": "array",
       "items": {
        "type": "string",
@@ -11683,7 +11683,7 @@
       "x-kubernetes-list-type": "atomic"
      },
      "mismatchLabelKeys": {
-      "description": "MismatchLabelKeys is a set of pod label keys to select which pods will be taken into consideration. The keys are used to lookup values from the incoming pod labels, those key-value labels are merged with `labelSelector` as `key notin (value)` to select the group of existing pods which pods will be taken into consideration for the incoming pod's pod (anti) affinity. Keys that don't exist in the incoming pod labels will be ignored. The default value is empty. The same key is forbidden to exist in both mismatchLabelKeys and labelSelector. Also, mismatchLabelKeys cannot be set when labelSelector isn't set. This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).",
+      "description": "MismatchLabelKeys is a set of pod label keys to select which pods will be taken into consideration. The keys are used to lookup values from the incoming pod labels, those key-value labels are merged with `labelSelector` as `key notin (value)` to select the group of existing pods which pods will be taken into consideration for the incoming pod's pod (anti) affinity. Keys that don't exist in the incoming pod labels will be ignored. The default value is empty. The same key is forbidden to exist in both mismatchLabelKeys and labelSelector. Also, mismatchLabelKeys cannot be set when labelSelector isn't set.",
       "type": "array",
       "items": {
        "type": "string",
@@ -11938,7 +11938,7 @@
       "format": "int32"
      },
      "nodeAffinityPolicy": {
-      "description": "NodeAffinityPolicy indicates how we will treat Pod's nodeAffinity/nodeSelector when calculating pod topology spread skew. Options are: - Honor: only nodes matching nodeAffinity/nodeSelector are included in the calculations. - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.\n\nIf this value is nil, the behavior is equivalent to the Honor policy. This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.\n\nPossible enum values:\n - `\"Honor\"` means use this scheduling directive when calculating pod topology spread skew.\n - `\"Ignore\"` means ignore this scheduling directive when calculating pod topology spread skew.",
+      "description": "NodeAffinityPolicy indicates how we will treat Pod's nodeAffinity/nodeSelector when calculating pod topology spread skew. Options are: - Honor: only nodes matching nodeAffinity/nodeSelector are included in the calculations. - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.\n\nIf this value is nil, the behavior is equivalent to the Honor policy.\n\nPossible enum values:\n - `\"Honor\"` means use this scheduling directive when calculating pod topology spread skew.\n - `\"Ignore\"` means ignore this scheduling directive when calculating pod topology spread skew.",
       "type": "string",
       "enum": [
        "Honor",
@@ -11946,7 +11946,7 @@
       ]
      },
      "nodeTaintsPolicy": {
-      "description": "NodeTaintsPolicy indicates how we will treat node taints when calculating pod topology spread skew. Options are: - Honor: nodes without taints, along with tainted nodes for which the incoming pod has a toleration, are included. - Ignore: node taints are ignored. All nodes are included.\n\nIf this value is nil, the behavior is equivalent to the Ignore policy. This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.\n\nPossible enum values:\n - `\"Honor\"` means use this scheduling directive when calculating pod topology spread skew.\n - `\"Ignore\"` means ignore this scheduling directive when calculating pod topology spread skew.",
+      "description": "NodeTaintsPolicy indicates how we will treat node taints when calculating pod topology spread skew. Options are: - Honor: nodes without taints, along with tainted nodes for which the incoming pod has a toleration, are included. - Ignore: node taints are ignored. All nodes are included.\n\nIf this value is nil, the behavior is equivalent to the Ignore policy.\n\nPossible enum values:\n - `\"Honor\"` means use this scheduling directive when calculating pod topology spread skew.\n - `\"Ignore\"` means ignore this scheduling directive when calculating pod topology spread skew.",
       "type": "string",
       "enum": [
        "Honor",
@@ -15261,6 +15261,10 @@
      "snp": {
       "description": "AMD SEV-SNP flags defined by the SEV-SNP specifications.",
       "$ref": "#/definitions/v1.SEVSNP"
+     },
+     "tdx": {
+      "description": "Intel Trust Domain Extensions (TDX).",
+      "$ref": "#/definitions/v1.TDX"
      }
     }
    },
@@ -16585,6 +16589,9 @@
       "$ref": "#/definitions/k8s.io.api.core.v1.LocalObjectReference"
      }
     }
+   },
+   "v1.TDX": {
+    "type": "object"
    },
    "v1.TLSConfiguration": {
     "description": "TLSConfiguration holds TLS options",
@@ -18874,6 +18881,9 @@
      }
     }
    },
+   "v1alpha1.VirtualMachineOpportunisticUpdateStrategy": {
+    "type": "object"
+   },
    "v1alpha1.VirtualMachinePool": {
     "description": "VirtualMachinePool resource contains a VirtualMachine configuration that can be used to replicate multiple VirtualMachine resources.",
     "type": "object",
@@ -18987,6 +18997,16 @@
      }
     }
    },
+   "v1alpha1.VirtualMachinePoolProactiveUpdateStrategy": {
+    "description": "VirtualMachinePoolProactiveUpdateStrategy represents proactive update strategy",
+    "type": "object",
+    "properties": {
+     "selectionPolicy": {
+      "description": "SelectionPolicy defines the priority in which VM instances are selected for proactive update Defaults to \"Random\" base policy when no SelectionPolicy is configured",
+      "$ref": "#/definitions/v1alpha1.VirtualMachinePoolSelectionPolicy"
+     }
+    }
+   },
    "v1alpha1.VirtualMachinePoolScaleInStrategy": {
     "description": "VirtualMachinePoolScaleInStrategy specifies how the VMPool controller manages scaling in VMs within a VMPool",
     "type": "object",
@@ -18998,12 +19018,34 @@
     }
    },
    "v1alpha1.VirtualMachinePoolSelectionPolicy": {
-    "description": "VirtualMachinePoolSelectionPolicy defines the priority in which VM instances are selected for scale-in",
+    "description": "VirtualMachinePoolSelectionPolicy defines the priority in which VM instances are selected for proactive scale-in or update",
     "type": "object",
     "properties": {
-     "basePolicy": {
-      "description": "BasePolicy is a catch-all policy [Random|DescendingOrder]",
+     "selectors": {
+      "description": "Selectors is a list of selection policies.",
+      "$ref": "#/definitions/v1alpha1.VirtualMachinePoolSelectors"
+     },
+     "sortPolicy": {
+      "description": "SortPolicy is a catch-all policy [AscendingOrder|DescendingOrder|Newest|Oldest|Random]",
       "type": "string"
+     }
+    }
+   },
+   "v1alpha1.VirtualMachinePoolSelectors": {
+    "description": "VirtualMachinePoolSelectors specifies filtering criteria for VM selection. If both are specified, both must match for a VM to be selected. If only one is specified, only that one must match for a VM to be selected.",
+    "type": "object",
+    "properties": {
+     "labelSelector": {
+      "description": "LabelSelector is a list of label selector for VMs.",
+      "$ref": "#/definitions/k8s.io.apimachinery.pkg.apis.meta.v1.LabelSelector"
+     },
+     "nodeSelectorRequirementMatcher": {
+      "description": "NodeSelectorRequirementMatcher is a list of node selector requirement for VMs.",
+      "type": "array",
+      "items": {
+       "default": {},
+       "$ref": "#/definitions/k8s.io.api.core.v1.NodeSelectorRequirement"
+      }
      }
     }
    },
@@ -19039,6 +19081,10 @@
       "description": "Label selector for pods. Existing Poolss whose pods are selected by this will be the ones affected by this deployment.",
       "$ref": "#/definitions/k8s.io.apimachinery.pkg.apis.meta.v1.LabelSelector"
      },
+     "updateStrategy": {
+      "description": "UpdateStrategy specifies how the VMPool controller manages updating VMs within a VMPool",
+      "$ref": "#/definitions/v1alpha1.VirtualMachinePoolUpdateStrategy"
+     },
      "virtualMachineTemplate": {
       "description": "Template describes the VM that will be created.",
       "$ref": "#/definitions/v1alpha1.VirtualMachineTemplateSpec"
@@ -19068,6 +19114,27 @@
      "replicas": {
       "type": "integer",
       "format": "int32"
+     }
+    }
+   },
+   "v1alpha1.VirtualMachinePoolUnmanagedStrategy": {
+    "type": "object"
+   },
+   "v1alpha1.VirtualMachinePoolUpdateStrategy": {
+    "description": "VirtualMachinePoolUpdateStrategy specifies how the VMPool controller manages updating VMs within a VMPool, by default it is proactive update.",
+    "type": "object",
+    "properties": {
+     "opportunistic": {
+      "description": "Opportunistic update only gets applied to the VM, VMI is updated naturally upon the restart. Whereas proactive it applies both the VM and VMI right away.",
+      "$ref": "#/definitions/v1alpha1.VirtualMachineOpportunisticUpdateStrategy"
+     },
+     "proactive": {
+      "description": "Proactive update by forcing the VMs to restart during update",
+      "$ref": "#/definitions/v1alpha1.VirtualMachinePoolProactiveUpdateStrategy"
+     },
+     "unmanaged": {
+      "description": "Unmanaged indicates that no automatic update of VMs within a VMPool is performed. When this is set, the VMPool controller will not update the VMs within the pool.",
+      "$ref": "#/definitions/v1alpha1.VirtualMachinePoolUnmanagedStrategy"
      }
     }
    },

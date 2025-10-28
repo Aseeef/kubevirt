@@ -2116,7 +2116,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -2131,7 +2130,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -2298,7 +2296,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -2313,7 +2310,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -2478,7 +2474,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -2493,7 +2488,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -2660,7 +2654,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -2675,7 +2668,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -3190,7 +3182,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -3205,7 +3196,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -3372,7 +3362,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -3387,7 +3376,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -3552,7 +3540,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -3567,7 +3554,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -3734,7 +3720,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -3749,7 +3734,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -5205,7 +5189,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -5220,7 +5203,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -5387,7 +5369,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -5402,7 +5383,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -5567,7 +5547,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -5582,7 +5561,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -5749,7 +5727,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -5764,7 +5741,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -7097,6 +7073,9 @@ var CRDsValidation map[string]string = map[string]string{
                         snp:
                           description: AMD SEV-SNP flags defined by the SEV-SNP specifications.
                           type: object
+                        tdx:
+                          description: Intel Trust Domain Extensions (TDX).
+                          type: object
                       type: object
                     machine:
                       description: Machine type.
@@ -7765,7 +7744,6 @@ var CRDsValidation map[string]string = map[string]string{
                           - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
 
                           If this value is nil, the behavior is equivalent to the Honor policy.
-                          This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                         type: string
                       nodeTaintsPolicy:
                         description: |-
@@ -7776,7 +7754,6 @@ var CRDsValidation map[string]string = map[string]string{
                           - Ignore: node taints are ignored. All nodes are included.
 
                           If this value is nil, the behavior is equivalent to the Ignore policy.
-                          This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                         type: string
                       topologyKey:
                         description: |-
@@ -9290,6 +9267,9 @@ var CRDsValidation map[string]string = map[string]string{
             snp:
               description: AMD SEV-SNP flags defined by the SEV-SNP specifications.
               type: object
+            tdx:
+              description: Intel Trust Domain Extensions (TDX).
+              type: object
           type: object
         memory:
           description: Required Memory related attributes of the instancetype.
@@ -10715,7 +10695,6 @@ var CRDsValidation map[string]string = map[string]string{
                               pod labels will be ignored. The default value is empty.
                               The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                               Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                              This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                             items:
                               type: string
                             type: array
@@ -10730,7 +10709,6 @@ var CRDsValidation map[string]string = map[string]string{
                               pod labels will be ignored. The default value is empty.
                               The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                               Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                              This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                             items:
                               type: string
                             type: array
@@ -10895,7 +10873,6 @@ var CRDsValidation map[string]string = map[string]string{
                           pod labels will be ignored. The default value is empty.
                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                         items:
                           type: string
                         type: array
@@ -10910,7 +10887,6 @@ var CRDsValidation map[string]string = map[string]string{
                           pod labels will be ignored. The default value is empty.
                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                         items:
                           type: string
                         type: array
@@ -11071,7 +11047,6 @@ var CRDsValidation map[string]string = map[string]string{
                               pod labels will be ignored. The default value is empty.
                               The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                               Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                              This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                             items:
                               type: string
                             type: array
@@ -11086,7 +11061,6 @@ var CRDsValidation map[string]string = map[string]string{
                               pod labels will be ignored. The default value is empty.
                               The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                               Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                              This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                             items:
                               type: string
                             type: array
@@ -11251,7 +11225,6 @@ var CRDsValidation map[string]string = map[string]string{
                           pod labels will be ignored. The default value is empty.
                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                         items:
                           type: string
                         type: array
@@ -11266,7 +11239,6 @@ var CRDsValidation map[string]string = map[string]string{
                           pod labels will be ignored. The default value is empty.
                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                         items:
                           type: string
                         type: array
@@ -12578,6 +12550,9 @@ var CRDsValidation map[string]string = map[string]string{
                 snp:
                   description: AMD SEV-SNP flags defined by the SEV-SNP specifications.
                   type: object
+                tdx:
+                  description: Intel Trust Domain Extensions (TDX).
+                  type: object
               type: object
             machine:
               description: Machine type.
@@ -13243,7 +13218,6 @@ var CRDsValidation map[string]string = map[string]string{
                   - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
 
                   If this value is nil, the behavior is equivalent to the Honor policy.
-                  This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                 type: string
               nodeTaintsPolicy:
                 description: |-
@@ -13254,7 +13228,6 @@ var CRDsValidation map[string]string = map[string]string{
                   - Ignore: node taints are ignored. All nodes are included.
 
                   If this value is nil, the behavior is equivalent to the Ignore policy.
-                  This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                 type: string
               topologyKey:
                 description: |-
@@ -16294,6 +16267,9 @@ var CRDsValidation map[string]string = map[string]string{
                 snp:
                   description: AMD SEV-SNP flags defined by the SEV-SNP specifications.
                   type: object
+                tdx:
+                  description: Intel Trust Domain Extensions (TDX).
+                  type: object
               type: object
             machine:
               description: Machine type.
@@ -16905,7 +16881,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -16920,7 +16895,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -17087,7 +17061,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -17102,7 +17075,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -17267,7 +17239,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -17282,7 +17253,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       pod labels will be ignored. The default value is empty.
                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                     items:
                                       type: string
                                     type: array
@@ -17449,7 +17419,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -17464,7 +17433,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   pod labels will be ignored. The default value is empty.
                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                 items:
                                   type: string
                                 type: array
@@ -18797,6 +18765,9 @@ var CRDsValidation map[string]string = map[string]string{
                         snp:
                           description: AMD SEV-SNP flags defined by the SEV-SNP specifications.
                           type: object
+                        tdx:
+                          description: Intel Trust Domain Extensions (TDX).
+                          type: object
                       type: object
                     machine:
                       description: Machine type.
@@ -19465,7 +19436,6 @@ var CRDsValidation map[string]string = map[string]string{
                           - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
 
                           If this value is nil, the behavior is equivalent to the Honor policy.
-                          This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                         type: string
                       nodeTaintsPolicy:
                         description: |-
@@ -19476,7 +19446,6 @@ var CRDsValidation map[string]string = map[string]string{
                           - Ignore: node taints are ignored. All nodes are included.
 
                           If this value is nil, the behavior is equivalent to the Ignore policy.
-                          This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                         type: string
                       topologyKey:
                         description: |-
@@ -20244,6 +20213,9 @@ var CRDsValidation map[string]string = map[string]string{
             snp:
               description: AMD SEV-SNP flags defined by the SEV-SNP specifications.
               type: object
+            tdx:
+              description: Intel Trust Domain Extensions (TDX).
+              type: object
           type: object
         memory:
           description: Required Memory related attributes of the instancetype.
@@ -20360,6 +20332,7 @@ var CRDsValidation map[string]string = map[string]string{
             Number of desired pods. This is a pointer to distinguish between explicit
             zero and not specified. Defaults to 1.
           format: int32
+          minimum: 0
           type: integer
         scaleInStrategy:
           description: ScaleInStrategy specifies how the VMPool controller manages
@@ -20374,11 +20347,98 @@ var CRDsValidation map[string]string = map[string]string{
                     SelectionPolicy defines the priority in which VM instances are selected for proactive scale-in
                     Defaults to "Random" base policy when no SelectionPolicy is configured
                   properties:
-                    basePolicy:
-                      description: BasePolicy is a catch-all policy [Random|DescendingOrder]
+                    selectors:
+                      description: Selectors is a list of selection policies.
+                      properties:
+                        labelSelector:
+                          description: LabelSelector is a list of label selector for
+                            VMs.
+                          properties:
+                            matchExpressions:
+                              description: matchExpressions is a list of label selector
+                                requirements. The requirements are ANDed.
+                              items:
+                                description: |-
+                                  A label selector requirement is a selector that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector
+                                      applies to.
+                                    type: string
+                                  operator:
+                                    description: |-
+                                      operator represents a key's relationship to a set of values.
+                                      Valid operators are In, NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: |-
+                                      values is an array of string values. If the operator is In or NotIn,
+                                      the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                      the values array must be empty. This array is replaced during a strategic
+                                      merge patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            matchLabels:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                operator is "In", and the values array contains only "value". The requirements are ANDed.
+                              type: object
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        nodeSelectorRequirementMatcher:
+                          description: NodeSelectorRequirementMatcher is a list of
+                            node selector requirement for VMs.
+                          items:
+                            description: |-
+                              A node selector requirement is a selector that contains values, a key, and an operator
+                              that relates the key and values.
+                            properties:
+                              key:
+                                description: The label key that the selector applies
+                                  to.
+                                type: string
+                              operator:
+                                description: |-
+                                  Represents a key's relationship to a set of values.
+                                  Valid operators are In, NotIn, Exists, DoesNotExist. Gt, and Lt.
+                                type: string
+                              values:
+                                description: |-
+                                  An array of string values. If the operator is In or NotIn,
+                                  the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                  the values array must be empty. If the operator is Gt or Lt, the values
+                                  array must have a single element, which will be interpreted as an integer.
+                                  This array is replaced during a strategic merge patch.
+                                items:
+                                  type: string
+                                type: array
+                                x-kubernetes-list-type: atomic
+                            required:
+                            - key
+                            - operator
+                            type: object
+                          type: array
+                      type: object
+                    sortPolicy:
+                      description: SortPolicy is a catch-all policy [AscendingOrder|DescendingOrder|Newest|Oldest|Random]
                       enum:
-                      - Random
+                      - AscendingOrder
                       - DescendingOrder
+                      - Newest
+                      - Oldest
+                      - Random
                       type: string
                   type: object
               type: object
@@ -20430,6 +20490,124 @@ var CRDsValidation map[string]string = map[string]string{
               type: object
           type: object
           x-kubernetes-map-type: atomic
+        updateStrategy:
+          description: UpdateStrategy specifies how the VMPool controller manages
+            updating VMs within a VMPool
+          properties:
+            opportunistic:
+              description: Opportunistic update only gets applied to the VM, VMI is
+                updated naturally upon the restart. Whereas proactive it applies both
+                the VM and VMI right away.
+              type: object
+            proactive:
+              description: Proactive update by forcing the VMs to restart during update
+              properties:
+                selectionPolicy:
+                  description: |-
+                    SelectionPolicy defines the priority in which VM instances are selected for proactive update
+                    Defaults to "Random" base policy when no SelectionPolicy is configured
+                  properties:
+                    selectors:
+                      description: Selectors is a list of selection policies.
+                      properties:
+                        labelSelector:
+                          description: LabelSelector is a list of label selector for
+                            VMs.
+                          properties:
+                            matchExpressions:
+                              description: matchExpressions is a list of label selector
+                                requirements. The requirements are ANDed.
+                              items:
+                                description: |-
+                                  A label selector requirement is a selector that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector
+                                      applies to.
+                                    type: string
+                                  operator:
+                                    description: |-
+                                      operator represents a key's relationship to a set of values.
+                                      Valid operators are In, NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: |-
+                                      values is an array of string values. If the operator is In or NotIn,
+                                      the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                      the values array must be empty. This array is replaced during a strategic
+                                      merge patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            matchLabels:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                operator is "In", and the values array contains only "value". The requirements are ANDed.
+                              type: object
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        nodeSelectorRequirementMatcher:
+                          description: NodeSelectorRequirementMatcher is a list of
+                            node selector requirement for VMs.
+                          items:
+                            description: |-
+                              A node selector requirement is a selector that contains values, a key, and an operator
+                              that relates the key and values.
+                            properties:
+                              key:
+                                description: The label key that the selector applies
+                                  to.
+                                type: string
+                              operator:
+                                description: |-
+                                  Represents a key's relationship to a set of values.
+                                  Valid operators are In, NotIn, Exists, DoesNotExist. Gt, and Lt.
+                                type: string
+                              values:
+                                description: |-
+                                  An array of string values. If the operator is In or NotIn,
+                                  the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                  the values array must be empty. If the operator is Gt or Lt, the values
+                                  array must have a single element, which will be interpreted as an integer.
+                                  This array is replaced during a strategic merge patch.
+                                items:
+                                  type: string
+                                type: array
+                                x-kubernetes-list-type: atomic
+                            required:
+                            - key
+                            - operator
+                            type: object
+                          type: array
+                      type: object
+                    sortPolicy:
+                      description: SortPolicy is a catch-all policy [AscendingOrder|DescendingOrder|Newest|Oldest|Random]
+                      enum:
+                      - AscendingOrder
+                      - DescendingOrder
+                      - Newest
+                      - Oldest
+                      - Random
+                      type: string
+                  type: object
+              type: object
+            unmanaged:
+              description: Unmanaged indicates that no automatic update of VMs within
+                a VMPool is performed. When this is set, the VMPool controller will
+                not update the VMs within the pool.
+              type: object
+          type: object
         virtualMachineTemplate:
           description: Template describes the VM that will be created.
           properties:
@@ -21592,7 +21770,6 @@ var CRDsValidation map[string]string = map[string]string{
                                               pod labels will be ignored. The default value is empty.
                                               The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                               Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                              This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                             items:
                                               type: string
                                             type: array
@@ -21607,7 +21784,6 @@ var CRDsValidation map[string]string = map[string]string{
                                               pod labels will be ignored. The default value is empty.
                                               The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                               Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                              This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                             items:
                                               type: string
                                             type: array
@@ -21775,7 +21951,6 @@ var CRDsValidation map[string]string = map[string]string{
                                           pod labels will be ignored. The default value is empty.
                                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                         items:
                                           type: string
                                         type: array
@@ -21790,7 +21965,6 @@ var CRDsValidation map[string]string = map[string]string{
                                           pod labels will be ignored. The default value is empty.
                                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                         items:
                                           type: string
                                         type: array
@@ -21956,7 +22130,6 @@ var CRDsValidation map[string]string = map[string]string{
                                               pod labels will be ignored. The default value is empty.
                                               The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                               Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                              This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                             items:
                                               type: string
                                             type: array
@@ -21971,7 +22144,6 @@ var CRDsValidation map[string]string = map[string]string{
                                               pod labels will be ignored. The default value is empty.
                                               The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                               Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                              This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                             items:
                                               type: string
                                             type: array
@@ -22139,7 +22311,6 @@ var CRDsValidation map[string]string = map[string]string{
                                           pod labels will be ignored. The default value is empty.
                                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                         items:
                                           type: string
                                         type: array
@@ -22154,7 +22325,6 @@ var CRDsValidation map[string]string = map[string]string{
                                           pod labels will be ignored. The default value is empty.
                                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                         items:
                                           type: string
                                         type: array
@@ -23516,6 +23686,9 @@ var CRDsValidation map[string]string = map[string]string{
                                   description: AMD SEV-SNP flags defined by the SEV-SNP
                                     specifications.
                                   type: object
+                                tdx:
+                                  description: Intel Trust Domain Extensions (TDX).
+                                  type: object
                               type: object
                             machine:
                               description: Machine type.
@@ -24189,7 +24362,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
 
                                   If this value is nil, the behavior is equivalent to the Honor policy.
-                                  This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                                 type: string
                               nodeTaintsPolicy:
                                 description: |-
@@ -24200,7 +24372,6 @@ var CRDsValidation map[string]string = map[string]string{
                                   - Ignore: node taints are ignored. All nodes are included.
 
                                   If this value is nil, the behavior is equivalent to the Ignore policy.
-                                  This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                                 type: string
                               topologyKey:
                                 description: |-
@@ -26965,7 +27136,6 @@ var CRDsValidation map[string]string = map[string]string{
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -26980,7 +27150,6 @@ var CRDsValidation map[string]string = map[string]string{
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -27150,7 +27319,6 @@ var CRDsValidation map[string]string = map[string]string{
                                               pod labels will be ignored. The default value is empty.
                                               The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                               Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                              This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                             items:
                                               type: string
                                             type: array
@@ -27165,7 +27333,6 @@ var CRDsValidation map[string]string = map[string]string{
                                               pod labels will be ignored. The default value is empty.
                                               The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                               Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                              This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                             items:
                                               type: string
                                             type: array
@@ -27334,7 +27501,6 @@ var CRDsValidation map[string]string = map[string]string{
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -27349,7 +27515,6 @@ var CRDsValidation map[string]string = map[string]string{
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -27519,7 +27684,6 @@ var CRDsValidation map[string]string = map[string]string{
                                               pod labels will be ignored. The default value is empty.
                                               The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                               Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                              This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                             items:
                                               type: string
                                             type: array
@@ -27534,7 +27698,6 @@ var CRDsValidation map[string]string = map[string]string{
                                               pod labels will be ignored. The default value is empty.
                                               The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                               Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                              This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                             items:
                                               type: string
                                             type: array
@@ -28907,6 +29070,9 @@ var CRDsValidation map[string]string = map[string]string{
                                       description: AMD SEV-SNP flags defined by the
                                         SEV-SNP specifications.
                                       type: object
+                                    tdx:
+                                      description: Intel Trust Domain Extensions (TDX).
+                                      type: object
                                   type: object
                                 machine:
                                   description: Machine type.
@@ -29583,7 +29749,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
 
                                       If this value is nil, the behavior is equivalent to the Honor policy.
-                                      This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                                     type: string
                                   nodeTaintsPolicy:
                                     description: |-
@@ -29594,7 +29759,6 @@ var CRDsValidation map[string]string = map[string]string{
                                       - Ignore: node taints are ignored. All nodes are included.
 
                                       If this value is nil, the behavior is equivalent to the Ignore policy.
-                                      This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                                     type: string
                                   topologyKey:
                                     description: |-
