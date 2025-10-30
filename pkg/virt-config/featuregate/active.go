@@ -126,6 +126,8 @@ const (
 	// Requires `autoattachGraphicsDevice` to be true or unset. Alpha feature, defaults unchanged.
 	// Owner: @dasionov
 	// Alpha: v1.6.0
+	// Beta: v1.7.0
+	//
 	VideoConfig = "VideoConfig"
 
 	// Owner: @varunrsekar
@@ -139,6 +141,14 @@ const (
 	//
 	// PasstIPStackMigration enables seamless migration with passt network binding.
 	PasstIPStackMigration = "PasstIPStackMigration"
+
+	// MigrationPriorityQueue enables controllers to assign priorities to migrations,
+	// ensuring system-initiated migrations (e.g., node drains, upgrades) take precedence
+	// over user-initiated ones (e.g., hot plug operations).
+	// Owner: sig-compute / @fossedihelm
+	// Alpha: v1.7.0
+	//
+	MigrationPriorityQueue = "MigrationPriorityQueue"
 )
 
 func init() {
@@ -170,8 +180,9 @@ func init() {
 	RegisterFeatureGate(FeatureGate{Name: HostDevicesWithDRAGate, State: Alpha})
 	RegisterFeatureGate(FeatureGate{Name: DecentralizedLiveMigration, State: Alpha})
 	RegisterFeatureGate(FeatureGate{Name: DeclarativeHotplugVolumesGate, State: Alpha})
-	RegisterFeatureGate(FeatureGate{Name: VideoConfig, State: Alpha})
+	RegisterFeatureGate(FeatureGate{Name: VideoConfig, State: Beta})
 	RegisterFeatureGate(FeatureGate{Name: PanicDevicesGate, State: Beta})
 	RegisterFeatureGate(FeatureGate{Name: PasstIPStackMigration, State: Alpha})
 	RegisterFeatureGate(FeatureGate{Name: IncrementalBackupGate, State: Alpha})
+	RegisterFeatureGate(FeatureGate{Name: MigrationPriorityQueue, State: Alpha})
 }

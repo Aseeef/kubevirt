@@ -1392,6 +1392,7 @@ var CRDsValidation map[string]string = map[string]string{
                   type: boolean
               type: object
             minCPUModel:
+              description: deprecated
               type: string
             network:
               description: NetworkConfiguration holds network options
@@ -14678,6 +14679,10 @@ var CRDsValidation map[string]string = map[string]string{
             are going to be preserved to ensure that addedNodeSelector
             can only restrict but not bypass constraints already set on the VM object.
           type: object
+        priority:
+          description: Priority of the migration. This can be one of 'system-critical',
+            'user-triggered', 'system-maintenance'.
+          type: string
         receive:
           description: If receieve is specified, this VirtualMachineInstanceMigration
             will be considered the target
@@ -20338,6 +20343,23 @@ var CRDsValidation map[string]string = map[string]string{
           description: ScaleInStrategy specifies how the VMPool controller manages
             scaling in VMs within a VMPool
           properties:
+            opportunistic:
+              description: |-
+                Opportunistic scale-in is a strategy when vms are deleted by some other means than the scale-in action.
+                For example, when the VM is deleted by the user or when the VM is deleted by the node that is hosting the VM.
+              properties:
+                statePreservation:
+                  description: |-
+                    Specifies if and how to preserve the state of the VMs selected during scale-in.
+                    Disabled - (Default) all state for VMs selected for scale-in will be deleted.
+                    Offline - PVCs for VMs selected for scale-in will be preserved and reused on scale-out (decreases provisioning time during scale out).
+                    Online - PVCs and memory for VMs selected for scale-in will be preserved and reused on scale-out (decreases provisioning and boot time during scale out).
+                  enum:
+                  - Disabled
+                  - Offline
+                  - Online
+                  type: string
+              type: object
             proactive:
               description: Proactive scale-in by forcing VMs to shutdown during scale-in
                 (Default)
@@ -20441,6 +20463,21 @@ var CRDsValidation map[string]string = map[string]string{
                       - Random
                       type: string
                   type: object
+                statePreservation:
+                  description: |-
+                    Specifies if and how to preserve the state of the VMs selected during scale-in.
+                    Disabled - (Default) all state for VMs selected for scale-in will be deleted.
+                    Offline - PVCs for VMs selected for scale-in will be preserved and reused on scale-out (decreases provisioning time during scale out).
+                    Online - PVCs and memory for VMs selected for scale-in will be preserved and reused on scale-out (decreases provisioning and boot time during scale out).
+                  enum:
+                  - Disabled
+                  - Offline
+                  - Online
+                  type: string
+              type: object
+            unmanaged:
+              description: The VM is never touched after creation. Users are responsible
+                for scaling in the pool manually.
               type: object
           type: object
         selector:
