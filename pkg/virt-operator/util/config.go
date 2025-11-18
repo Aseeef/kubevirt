@@ -82,6 +82,9 @@ const (
 	AdditionalPropertiesMigrationNetwork = "MigrationNetwork"
 
 	// lookup key in AdditionalProperties
+	AdditionalPropertiesWorkloadEncryptionTDXEnabled = "WorkloadEncryptionTDXEnabled"
+
+	// lookup key in AdditionalProperties
 	AdditionalPropertiesPersistentReservationEnabled = "PersistentReservationEnabled"
 
 	// lookup key in AdditionalProperties
@@ -162,6 +165,9 @@ func GetTargetConfigFromKVWithEnvVarManager(kv *v1.KubeVirt, envVarManager EnvVa
 		for _, v := range kv.Spec.Configuration.DeveloperConfiguration.FeatureGates {
 			if v == featuregate.PersistentReservation {
 				additionalProperties[AdditionalPropertiesPersistentReservationEnabled] = ""
+			}
+			if v == featuregate.WorkloadEncryptionTDX {
+				additionalProperties[AdditionalPropertiesWorkloadEncryptionTDXEnabled] = ""
 			}
 		}
 	}
@@ -489,6 +495,11 @@ func (c *KubeVirtDeploymentConfig) GetImagePullSecrets() []k8sv1.LocalObjectRefe
 		return data
 	}
 	return data
+}
+
+func (c *KubeVirtDeploymentConfig) WorkloadEncryptionTDXEnabled() bool {
+	_, enabled := c.AdditionalProperties[AdditionalPropertiesWorkloadEncryptionTDXEnabled]
+	return enabled
 }
 
 func (c *KubeVirtDeploymentConfig) PersistentReservationEnabled() bool {
