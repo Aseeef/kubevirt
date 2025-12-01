@@ -1033,11 +1033,6 @@ func (in *DeveloperConfiguration) DeepCopyInto(out *DeveloperConfiguration) {
 		*out = new(LogVerbosity)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.QGS != nil {
-		in, out := &in.QGS, &out.QGS
-		*out = new(QGSConfiguration)
-		(*in).DeepCopyInto(*out)
-	}
 	return
 }
 
@@ -2994,6 +2989,11 @@ func (in *KubeVirtConfiguration) DeepCopyInto(out *KubeVirtConfiguration) {
 	if in.ChangedBlockTrackingLabelSelectors != nil {
 		in, out := &in.ChangedBlockTrackingLabelSelectors, &out.ChangedBlockTrackingLabelSelectors
 		*out = new(ChangedBlockTrackingSelectors)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.QGS != nil {
+		in, out := &in.QGS, &out.QGS
+		*out = new(QGSConfiguration)
 		(*in).DeepCopyInto(*out)
 	}
 	return
