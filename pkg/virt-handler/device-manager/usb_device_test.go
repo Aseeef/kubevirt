@@ -78,14 +78,14 @@ var _ = Describe("USB Device", func() {
 	const resourceName1 = "testing.usb/usecase"
 	const resourceName2 = "testing.usb/another"
 
-	var dpi *USBDevicePlugin
-	var stop chan struct{}
-	var workDir string
+	var (
+		dpi     *USBDevicePlugin
+		stop    chan struct{}
+		workDir string
+	)
 
 	BeforeEach(func() {
-		var err error
 		workDir = GinkgoT().TempDir()
-		Expect(err).ToNot(HaveOccurred())
 		ctrl := gomock.NewController(GinkgoT())
 		permissionManager := NewMockPermissionManager(ctrl)
 		permissionManager.EXPECT().ChownAtNoFollow(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
@@ -115,18 +115,18 @@ var _ = Describe("USB Device", func() {
 		os.OpenFile(dpi.socketPath, os.O_RDONLY|os.O_CREATE, 0666)
 
 		errChan := make(chan error, 1)
-		go func(errChan chan error) {
+		go func() {
 			errChan <- dpi.healthCheck()
-		}(errChan)
+		}()
 
 		By("waiting for initial healthchecks to send Healthy message for each device")
-		for i := 0; i < len(dpi.devs); i++ {
+		for range dpi.devs {
 			Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Healthy))))
 		}
 
 		Expect(os.Remove(dpi.socketPath)).To(Succeed())
 
-		Expect(<-errChan).ToNot(HaveOccurred())
+		Eventually(errChan, 5*time.Second).Should(Receive(Not(HaveOccurred())))
 	})
 
 	It("Should monitor health of device node", func() {
@@ -137,11 +137,10 @@ var _ = Describe("USB Device", func() {
 
 		By("waiting for initial healthchecks to send Healthy message")
 		go dpi.healthCheck()
-		for i := 0; i < len(dpi.devs); i++ {
+		for range dpi.devs {
 			Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Healthy))))
 		}
 
-		time.Sleep(1 * time.Second)
 		By("Removing (fake) device nodes")
 		usbDevicePath1 := filepath.Join(workDir, usbs[0].DevicePath)
 		usbDevicePath2 := filepath.Join(workDir, usbs[1].DevicePath)
@@ -355,7 +354,7 @@ var _ = Describe("USB Device", func() {
 		Expect(watcher.WatchList()).To(HaveLen(3))
 	})
 
-	It("Should return error if device parent directory does not exist", func() {
+	It("Should return error if device directory does not exist", func() {
 		badDevices := []*PluginDevices{{ID: "bad", Devices: []*USBDevice{{DevicePath: "/missing/device"}}}}
 		badPlugin := NewUSBDevicePlugin(resourceName1, workDir, badDevices, nil)
 
@@ -363,7 +362,7 @@ var _ = Describe("USB Device", func() {
 		defer watcher.Close()
 
 		err := badPlugin.SetupMonitoredDevicesFunc(watcher, make(map[string]string))
-		Expect(err).To(HaveOccurred())
+		Expect(err).To(MatchError(ContainSubstring("failed to watch device")))
 	})
 
 	It("Should allocate the device", func() {
