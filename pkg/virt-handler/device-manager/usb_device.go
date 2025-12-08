@@ -425,7 +425,6 @@ func NewUSBDevicePlugin(resourceName string, deviceRoot string, pluginDevices []
 			return nil
 		}
 	}
-	// todo this is dirty, make this NOT a usb method so we can call it directory from constrctor
 	usb.AllocateDP = usb.AllocateDPFunc
 	usb.devs = usb.devicesToKubeVirtDevicePlugin()
 	return usb
