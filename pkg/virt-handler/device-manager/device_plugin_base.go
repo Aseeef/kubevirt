@@ -73,12 +73,82 @@ type DevicePluginBase struct {
 	CustomReportHealth    func(deviceID string, absoluteDevicePath string, healthy bool) (bool, error)           // Optional function for plugin devices that require custom logic to handle health reports.
 }
 
+// NewDevicePluginBase creates a new DevicePluginBase with proper initialization of internal fields.
+//
+// Required parameters:
+//   - socketPath: Path to the device plugin socket
+//   - resourceName: The kubernetes resource name for this device plugin
+//   - deviceRoot: Root directory where the device is located
+//   - devicePath: Relative path to the device from the device root
+//
+// After construction, you MUST set the required function hooks before calling Start():
+//   - SetupMonitoredDevices: Function to set up devices to monitor
+//   - AllocateDP: Function to handle device allocation requests
+//
+// Optional function hooks can be set after construction:
+//   - SetupDevicePlugin, GetIDDeviceName, ConfigurePermissions, CustomReportHealth
+func NewDevicePluginBase(
+	socketPath string,
+	resourceName string,
+	deviceRoot string,
+	devicePath string,
+) (*DevicePluginBase, error) {
+	// Validate required string fields
+	if socketPath == "" {
+		return nil, fmt.Errorf("socketPath is required")
+	}
+	if resourceName == "" {
+		return nil, fmt.Errorf("resourceName is required")
+	}
+	if deviceRoot == "" {
+		return nil, fmt.Errorf("deviceRoot is required")
+	}
+	if devicePath == "" {
+		return nil, fmt.Errorf("devicePath is required")
+	}
+
+	dpi := &DevicePluginBase{
+		// Initialize internal fields
+		devs:        []*pluginapi.Device{},
+		health:      make(chan deviceHealth),
+		lock:        &sync.Mutex{},
+		initialized: false,
+		// server, stop, done, deregistered are initialized in Start()
+
+		// Set required fields
+		socketPath:   socketPath,
+		resourceName: resourceName,
+		deviceRoot:   deviceRoot,
+		devicePath:   devicePath,
+	}
+
+	return dpi, nil
+}
+
+// validateRequiredHooks checks that all required function hooks are set.
+// Returns an error if any required hook is missing.
+func (dpi *DevicePluginBase) validateRequiredHooks() error {
+	if dpi.SetupMonitoredDevices == nil {
+		return fmt.Errorf("SetupMonitoredDevices function hook is required but not set")
+	}
+	if dpi.AllocateDP == nil {
+		return fmt.Errorf("AllocateDP function hook is required but not set")
+	}
+	return nil
+}
+
 func (dpi *DevicePluginBase) GetResourceName() string {
 	return dpi.resourceName
 }
 
 func (dpi *DevicePluginBase) Start(stop <-chan struct{}) (err error) {
 	logger := log.DefaultLogger()
+
+	// Validate required hooks are set before starting
+	if err := dpi.validateRequiredHooks(); err != nil {
+		return fmt.Errorf("device plugin validation failed: %w", err)
+	}
+
 	dpi.stop = stop
 	dpi.done = make(chan struct{})
 	dpi.deregistered = make(chan struct{})

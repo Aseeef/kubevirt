@@ -25,7 +25,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/fsnotify/fsnotify"
 	v1 "kubevirt.io/api/core/v1"
@@ -60,21 +59,17 @@ func NewPCIDevicePlugin(pciDevices []*PCIDevice, resourceName string) *PCIDevice
 
 	devs := constructDPIdevices(pciDevices, iommuToPCIMap)
 
-	dpi := &PCIDevicePlugin{
-		DevicePluginBase: &DevicePluginBase{
-			devs:         devs,
-			initialized:  false,
-			lock:         &sync.Mutex{},
-			socketPath:   serverSock,
-			resourceName: resourceName,
-			deviceRoot:   util.HostRootMount,
-			devicePath:   vfioDevicePath,
-			health:       make(chan deviceHealth),
-			done:         make(chan struct{}),
-			deregistered: make(chan struct{}),
-		},
-		iommuToPCIMap: iommuToPCIMap,
+	base, err := NewDevicePluginBase(serverSock, resourceName, util.HostRootMount, vfioDevicePath)
+	if err != nil {
+		log.DefaultLogger().Reason(err).Errorf("failed to create device plugin base for %s", resourceName)
+		return nil
 	}
+
+	dpi := &PCIDevicePlugin{
+		DevicePluginBase: base,
+		iommuToPCIMap:    iommuToPCIMap,
+	}
+	dpi.devs = devs
 	dpi.SetupMonitoredDevices = dpi.SetupMonitoredDevicesFunc
 	dpi.GetIDDeviceName = dpi.GetIDDeviceNameFunc
 	dpi.AllocateDP = dpi.AllocateDPFunc

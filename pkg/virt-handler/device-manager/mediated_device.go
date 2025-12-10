@@ -20,14 +20,12 @@
 package device_manager
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-
-	"context"
 
 	"github.com/fsnotify/fsnotify"
 	v1 "kubevirt.io/api/core/v1"
@@ -61,21 +59,17 @@ func NewMediatedDevicePlugin(mdevs []*MDEV, resourceName string) *MediatedDevice
 
 	devs := constructDPIdevicesFromMdev(mdevs, iommuToMDEVMap)
 
-	dpi := &MediatedDevicePlugin{
-		DevicePluginBase: &DevicePluginBase{
-			devs:         devs,
-			socketPath:   serverSock,
-			deviceRoot:   util.HostRootMount,
-			devicePath:   vfioDevicePath,
-			resourceName: resourceName,
-			initialized:  false,
-			lock:         &sync.Mutex{},
-			health:       make(chan deviceHealth),
-			done:         make(chan struct{}),
-			deregistered: make(chan struct{}),
-		},
-		iommuToMDEVMap: iommuToMDEVMap,
+	base, err := NewDevicePluginBase(serverSock, resourceName, util.HostRootMount, vfioDevicePath)
+	if err != nil {
+		log.DefaultLogger().Reason(err).Errorf("failed to create device plugin base for %s", resourceName)
+		return nil
 	}
+
+	dpi := &MediatedDevicePlugin{
+		DevicePluginBase: base,
+		iommuToMDEVMap:   iommuToMDEVMap,
+	}
+	dpi.devs = devs
 	dpi.SetupMonitoredDevices = dpi.SetupMonitoredDevicesFunc
 	dpi.GetIDDeviceName = dpi.GetIDDeviceNameFunc
 	dpi.AllocateDP = dpi.AllocateDPFunc

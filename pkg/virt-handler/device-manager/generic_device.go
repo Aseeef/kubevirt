@@ -25,7 +25,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync"
 
 	"github.com/fsnotify/fsnotify"
 	"kubevirt.io/client-go/log"
@@ -42,21 +41,19 @@ type GenericDevicePlugin struct {
 
 func NewGenericDevicePlugin(deviceName string, devicePath string, maxDevices int, permissions string, preOpen bool) *GenericDevicePlugin {
 	serverSock := SocketPath(deviceName)
+	resourceName := fmt.Sprintf("%s/%s", DeviceNamespace, deviceName)
+
+	base, err := NewDevicePluginBase(serverSock, resourceName, util.HostRootMount, devicePath)
+	if err != nil {
+		// This should never happen with valid inputs, but log if it does
+		log.DefaultLogger().Reason(err).Errorf("failed to create device plugin base for %s", deviceName)
+		return nil
+	}
+
 	dpi := &GenericDevicePlugin{
-		DevicePluginBase: &DevicePluginBase{
-			devs:         []*pluginapi.Device{},
-			socketPath:   serverSock,
-			deviceRoot:   util.HostRootMount,
-			devicePath:   devicePath,
-			health:       make(chan deviceHealth),
-			done:         make(chan struct{}),
-			deregistered: make(chan struct{}),
-			resourceName: fmt.Sprintf("%s/%s", DeviceNamespace, deviceName),
-			initialized:  false,
-			lock:         &sync.Mutex{},
-		},
-		preOpen:     preOpen,
-		permissions: permissions,
+		DevicePluginBase: base,
+		preOpen:          preOpen,
+		permissions:      permissions,
 	}
 
 	for i := range maxDevices {

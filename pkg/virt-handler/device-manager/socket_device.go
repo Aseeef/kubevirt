@@ -25,7 +25,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/fsnotify/fsnotify"
 
@@ -83,21 +82,19 @@ func (dpi *SocketDevicePlugin) setSocketDirectoryPermissions() error {
 }
 
 func NewSocketDevicePlugin(socketName, socketDir, socketFile string, maxDevices int, executor selinux.Executor, p PermissionManager) *SocketDevicePlugin {
+	resourceName := fmt.Sprintf("%s/%s", DeviceNamespace, socketName)
+	pluginSocketPath := SocketPath(strings.Replace(socketName, "/", "-", -1))
+
+	base, err := NewDevicePluginBase(pluginSocketPath, resourceName, socketDir, socketFile)
+	if err != nil {
+		log.DefaultLogger().Reason(err).Errorf("failed to create device plugin base for %s", socketName)
+		return nil
+	}
+
 	dpi := &SocketDevicePlugin{
-		DevicePluginBase: &DevicePluginBase{
-			devs:         []*pluginapi.Device{},
-			health:       make(chan deviceHealth),
-			resourceName: fmt.Sprintf("%s/%s", DeviceNamespace, socketName),
-			initialized:  false,
-			lock:         &sync.Mutex{},
-			done:         make(chan struct{}),
-			deregistered: make(chan struct{}),
-			socketPath:   SocketPath(strings.Replace(socketName, "/", "-", -1)),
-			deviceRoot:   socketDir,
-			devicePath:   socketFile,
-		},
-		p:        p,
-		executor: executor,
+		DevicePluginBase: base,
+		p:                p,
+		executor:         executor,
 	}
 
 	for i := range maxDevices {
