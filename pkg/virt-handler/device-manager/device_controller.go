@@ -21,10 +21,12 @@ package device_manager
 
 import (
 	"bufio"
+	"bufio"
 	"fmt"
 	"math"
 	"os"
 	"path"
+	"strconv"
 	"strconv"
 	"strings"
 	"sync"
@@ -222,13 +224,13 @@ func (c *DeviceController) updatePermittedHostDevicePlugins() []Device {
 	// This plugin tracks available TDX "slots" on the node (there are a finite number of slots on a node)
 	// and ensures that the QGS socket can be mounted into Virt-Launcher Pods for attestation.
 	if maxTDXVMs := c.GetTDXVMLimit(); c.virtConfig.WorkloadEncryptionTDXEnabled() && maxTDXVMs > 0 {
-		socketDir := path.Dir(path.Join(util.HostRootMount, c.virtConfig.GetQGSSocketPath()))
+		socketDir := path.Dir(c.virtConfig.GetQGSSocketPath())
 		socketName := path.Base(c.virtConfig.GetQGSSocketPath())
 		var tdxPlugin Device
 		if c.virtConfig.RequireQGS() {
-			tdxPlugin = NewSocketDevicePlugin("tdx", socketDir, socketName, maxTDXVMs, selinux.SELinuxExecutor{}, NewPermissionManager())
+			tdxPlugin = NewSocketDevicePlugin("tdx", socketDir, socketName, maxTDXVMs, selinux.SELinuxExecutor{}, NewPermissionManager(), true)
 		} else {
-			tdxPlugin = NewOptionalSocketDevicePlugin("tdx", socketDir, socketName, maxTDXVMs, selinux.SELinuxExecutor{}, NewPermissionManager())
+			tdxPlugin = NewOptionalSocketDevicePlugin("tdx", socketDir, socketName, maxTDXVMs, selinux.SELinuxExecutor{}, NewPermissionManager(), true)
 		}
 		permittedDevices = append(permittedDevices, tdxPlugin)
 	}
