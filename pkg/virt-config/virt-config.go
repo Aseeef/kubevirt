@@ -128,11 +128,11 @@ func (c *ClusterConfig) GetTDXConfiguration() v1.TDXConfiguration {
 }
 
 func (c *ClusterConfig) RequireQGS() bool {
-	return *c.getTDXConfiguration().Attestation.Enforced
+	return *c.GetTDXConfiguration().Attestation.Enforced
 }
 
 func (c *ClusterConfig) GetQGSSocketPath() string {
-	return *c.getTDXConfiguration().Attestation.QgsSocketPath
+	return *c.GetTDXConfiguration().Attestation.QgsSocketPath
 }
 
 func (c *ClusterConfig) GetMigrationConfiguration() *v1.MigrationConfiguration {

@@ -22,6 +22,7 @@ package device_manager
 import (
 	"context"
 	"fmt"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -39,12 +40,14 @@ import (
 
 type SocketDevicePlugin struct {
 	*DevicePluginBase
-	p        PermissionManager
-	executor selinux.Executor
+	p         PermissionManager
+	executor  selinux.Executor
+	socketDir string
+	rootBase  string
 }
 
 func (dpi *SocketDevicePlugin) setSocketPermissions() error {
-	prSock, err := safepath.JoinAndResolveWithRelativeRoot("/", dpi.deviceRoot, dpi.devicePath)
+	prSock, err := safepath.JoinAndResolveWithRelativeRoot(dpi.rootBase, dpi.deviceRoot, dpi.devicePath)
 	if err != nil {
 		return fmt.Errorf("error opening the socket %s/%s: %v", dpi.deviceRoot, dpi.devicePath, err)
 	}
@@ -63,7 +66,7 @@ func (dpi *SocketDevicePlugin) setSocketPermissions() error {
 }
 
 func (dpi *SocketDevicePlugin) setSocketDirectoryPermissions() error {
-	dir, err := safepath.JoinAndResolveWithRelativeRoot("/", dpi.deviceRoot)
+	dir, err := safepath.JoinAndResolveWithRelativeRoot(dpi.rootBase, dpi.deviceRoot)
 	if err != nil {
 		return fmt.Errorf("error opening the socket dir %s: %v", dpi.deviceRoot, err)
 	}
@@ -83,8 +86,8 @@ func (dpi *SocketDevicePlugin) setSocketDirectoryPermissions() error {
 }
 
 // Optional Socket Device Plugins are always healthy. If socket device is available, we mount it, otherwise we carry on life without it.
-func NewOptionalSocketDevicePlugin(socketName, socketDir, socketFile string, maxDevices int, executor selinux.Executor, p PermissionManager) *SocketDevicePlugin {
-	dpi := NewSocketDevicePlugin(socketName, socketDir, socketFile, maxDevices, executor, p)
+func NewOptionalSocketDevicePlugin(socketName, socketDir, socketFile string, maxDevices int, executor selinux.Executor, p PermissionManager, isSocketHostPath bool) *SocketDevicePlugin {
+	dpi := NewSocketDevicePlugin(socketName, socketDir, socketFile, maxDevices, executor, p, isSocketHostPath)
 	for _, dev := range dpi.devs {
 		dev.Health = pluginapi.Healthy
 	}
@@ -94,7 +97,14 @@ func NewOptionalSocketDevicePlugin(socketName, socketDir, socketFile string, max
 	return dpi
 }
 
-func NewSocketDevicePlugin(socketName, socketDir, socketFile string, maxDevices int, executor selinux.Executor, p PermissionManager) *SocketDevicePlugin {
+func NewSocketDevicePlugin(socketName, socketDir, socketFile string, maxDevices int, executor selinux.Executor, p PermissionManager, isSocketHostPath bool) *SocketDevicePlugin {
+	// If isSocketHostPath is true, then we assume socket is mounted on the host path,
+	// otherwise we assume it is mounted on the container path and this virt-handler
+	// can directly access it.
+	rootBase := "/"
+	if isSocketHostPath {
+		rootBase = util.HostRootMount
+	}
 	dpi := &SocketDevicePlugin{
 		DevicePluginBase: &DevicePluginBase{
 			devs:         []*pluginapi.Device{},
@@ -105,11 +115,13 @@ func NewSocketDevicePlugin(socketName, socketDir, socketFile string, maxDevices 
 			done:         make(chan struct{}),
 			deregistered: make(chan struct{}),
 			socketPath:   SocketPath(strings.Replace(socketName, "/", "-", -1)),
-			deviceRoot:   socketDir,
+			deviceRoot:   path.Join(rootBase, socketDir),
 			devicePath:   socketFile,
 		},
-		p:        p,
-		executor: executor,
+		p:         p,
+		executor:  executor,
+		socketDir: socketDir,
+		rootBase:  rootBase,
 	}
 
 	for i := range maxDevices {
@@ -126,6 +138,7 @@ func NewSocketDevicePlugin(socketName, socketDir, socketFile string, maxDevices 
 	if p != nil && executor != nil {
 		dpi.ConfigurePermissions = func(_ *safepath.Path) error {
 			// Set directory permissions first
+			// todo: should silently fail if the directory is not available, otherwise the device will be marked unhealthy.
 			if err := dpi.setSocketDirectoryPermissions(); err != nil {
 				return err
 			}
@@ -145,8 +158,8 @@ func (dpi *SocketDevicePlugin) AllocateDPFunc(ctx context.Context, r *pluginapi.
 	containerResponse := new(pluginapi.ContainerAllocateResponse)
 
 	m := new(pluginapi.Mount)
-	m.HostPath = dpi.deviceRoot
-	m.ContainerPath = dpi.deviceRoot
+	m.HostPath = dpi.socketDir
+	m.ContainerPath = dpi.socketDir
 	m.ReadOnly = false
 	containerResponse.Mounts = []*pluginapi.Mount{m}
 
