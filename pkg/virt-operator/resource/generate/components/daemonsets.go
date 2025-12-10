@@ -2,7 +2,6 @@ package components
 
 import (
 	"fmt"
-	"path"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,7 +25,6 @@ const (
 	runtimesPath                   = "/var/run/kubevirt-libvirt-runtimes"
 	PrHelperName                   = "pr-helper"
 	prVolumeName                   = "pr-helper-socket-vol"
-	qgsVolumeName                  = "qgs-socket-vol"
 	devDirVol                      = "dev-dir"
 	SidecarShimName                = "sidecar-shim"
 	etcMultipath                   = "etc-multipath"
@@ -68,7 +66,7 @@ func RenderPrHelperContainer(image string, pullPolicy corev1.PullPolicy) corev1.
 	}
 }
 
-func NewHandlerDaemonSet(namespace, repository, imagePrefix, version, launcherVersion, prHelperVersion, sidecarShimVersion, productName, productVersion, productComponent, image, launcherImage, prHelperImage, sidecarShimImage string, pullPolicy corev1.PullPolicy, imagePullSecrets []corev1.LocalObjectReference, migrationNetwork *string, verbosity string, extraEnv map[string]string, enablePrHelper bool, isTDXEnabled bool, qgsSocketPath string) *appsv1.DaemonSet {
+func NewHandlerDaemonSet(namespace, repository, imagePrefix, version, launcherVersion, prHelperVersion, sidecarShimVersion, productName, productVersion, productComponent, image, launcherImage, prHelperImage, sidecarShimImage string, pullPolicy corev1.PullPolicy, imagePullSecrets []corev1.LocalObjectReference, migrationNetwork *string, verbosity string, extraEnv map[string]string, enablePrHelper bool) *appsv1.DaemonSet {
 
 	deploymentName := VirtHandlerName
 	imageName := fmt.Sprintf("%s%s", imagePrefix, deploymentName)
@@ -354,21 +352,6 @@ func NewHandlerDaemonSet(namespace, repository, imagePrefix, version, launcherVe
 	}
 	if sidecarShimImage == "" {
 		sidecarShimImage = fmt.Sprintf("%s/%s%s%s", repository, imagePrefix, SidecarShimName, AddVersionSeparatorPrefix(sidecarShimVersion))
-	}
-	if isTDXEnabled {
-		qgsSocketDir := path.Dir(qgsSocketPath)
-		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
-			Name:      qgsVolumeName,
-			MountPath: qgsSocketDir,
-		})
-		pod.Volumes = append(pod.Volumes, corev1.Volume{
-			Name: qgsVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{
-					Path: qgsSocketDir,
-				},
-			},
-		})
 	}
 
 	if enablePrHelper {

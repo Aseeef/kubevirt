@@ -101,6 +101,11 @@ spec:
           matchLabelsKey: matchLabelsValue
     commonInstancetypesDeployment:
       enabled: true
+    confidentialCompute:
+      tdx:
+        attestation:
+          enforced: true
+          qgsSocketPath: qgsSocketPathValue
     controllerConfiguration:
       restClient:
         rateLimiter:
@@ -223,9 +228,6 @@ spec:
         selectors:
         - product: productValue
           vendor: vendorValue
-    qgs-tdx:
-      enabled: true
-      qgsSocketPath: qgsSocketPathValue
     seccompConfiguration:
       virtualMachineInstanceProfile:
         customProfile:

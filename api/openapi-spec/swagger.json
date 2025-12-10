@@ -13447,6 +13447,15 @@
      }
     }
    },
+   "v1.ConfidentialComputeConfiguration": {
+    "type": "object",
+    "properties": {
+     "tdx": {
+      "description": "TDX configuration for attestation on the Intel TDX Platform",
+      "$ref": "#/definitions/v1.TDXConfiguration"
+     }
+    }
+   },
    "v1.ConfigDriveSSHPublicKeyAccessCredentialPropagation": {
     "type": "object"
    },
@@ -15151,6 +15160,10 @@
       "description": "CommonInstancetypesDeployment controls the deployment of common-instancetypes resources",
       "$ref": "#/definitions/v1.CommonInstancetypesDeployment"
      },
+     "confidentialCompute": {
+      "description": "QGS configuration for attestation on the Intel TDX Platform",
+      "$ref": "#/definitions/v1.ConfidentialComputeConfiguration"
+     },
      "controllerConfiguration": {
       "$ref": "#/definitions/v1.ReloadableComponentConfiguration"
      },
@@ -15236,10 +15249,6 @@
      },
      "permittedHostDevices": {
       "$ref": "#/definitions/v1.PermittedHostDevices"
-     },
-     "qgs-tdx": {
-      "description": "QGS configuration for attestation on the Intel TDX Platform",
-      "$ref": "#/definitions/v1.QGSConfiguration"
      },
      "seccompConfiguration": {
       "$ref": "#/definitions/v1.SeccompConfiguration"
@@ -16329,20 +16338,6 @@
      }
     }
    },
-   "v1.QGSConfiguration": {
-    "description": "QGSConfiguration holds QGS configuration",
-    "type": "object",
-    "properties": {
-     "enabled": {
-      "description": "Indicates whether TDX VM should require QGS in order to be scheduled, defaults to true",
-      "type": "boolean"
-     },
-     "qgsSocketPath": {
-      "description": "QGS socket path, defaults to /var/run/tdx-qgs/qgs.socket",
-      "type": "string"
-     }
-    }
-   },
    "v1.QemuGuestAgentSSHPublicKeyAccessCredentialPropagation": {
     "type": "object",
     "required": [
@@ -16890,6 +16885,28 @@
    },
    "v1.TDX": {
     "type": "object"
+   },
+   "v1.TDXAttestationConfiguration": {
+    "description": "QGSConfiguration holds QGS configuration",
+    "type": "object",
+    "properties": {
+     "enforced": {
+      "description": "Indicates whether TDX VM should enforce the existence of QGS (required for attestation) in order to be scheduled, defaults to false",
+      "type": "boolean"
+     },
+     "qgsSocketPath": {
+      "description": "QGS socket path, defaults to /var/run/tdx-qgs/qgs.socket",
+      "type": "string"
+     }
+    }
+   },
+   "v1.TDXConfiguration": {
+    "type": "object",
+    "properties": {
+     "attestation": {
+      "$ref": "#/definitions/v1.TDXAttestationConfiguration"
+     }
+    }
    },
    "v1.TLSConfiguration": {
     "description": "TLSConfiguration holds TLS options",

@@ -3073,7 +3073,24 @@ type KubeVirtConfiguration struct {
 	ChangedBlockTrackingLabelSelectors *ChangedBlockTrackingSelectors `json:"changedBlockTrackingLabelSelectors,omitempty"`
 
 	// QGS configuration for attestation on the Intel TDX Platform
-	QGS *QGSConfiguration `json:"qgs-tdx,omitempty"`
+	ConfidentialCompute *ConfidentialComputeConfiguration `json:"confidentialCompute,omitempty"`
+}
+
+// QGSConfiguration holds QGS configuration
+type TDXAttestationConfiguration struct {
+	// Indicates whether TDX VM should enforce the existence of QGS (required for attestation) in order to be scheduled, defaults to false
+	Enforced *bool `json:"enforced,omitempty"`
+	// QGS socket path, defaults to /var/run/tdx-qgs/qgs.socket
+	QgsSocketPath *string `json:"qgsSocketPath,omitempty"`
+}
+
+type TDXConfiguration struct {
+	Attestation *TDXAttestationConfiguration `json:"attestation,omitempty"`
+}
+
+type ConfidentialComputeConfiguration struct {
+	// TDX configuration for attestation on the Intel TDX Platform
+	TDX *TDXConfiguration `json:"tdx,omitempty"`
 }
 
 type ChangedBlockTrackingSelectors struct {
@@ -3332,14 +3349,6 @@ type DeveloperConfiguration struct {
 	LogVerbosity               *LogVerbosity     `json:"logVerbosity,omitempty"`
 	// Enable the ability to pprof profile KubeVirt control plane
 	ClusterProfiler bool `json:"clusterProfiler,omitempty"`
-}
-
-// QGSConfiguration holds QGS configuration
-type QGSConfiguration struct {
-	// Indicates whether TDX VM should require QGS in order to be scheduled, defaults to true
-	Enabled *bool `json:"enabled,omitempty"`
-	// QGS socket path, defaults to /var/run/tdx-qgs/qgs.socket
-	QgsSocketPath *string `json:"qgsSocketPath,omitempty"`
 }
 
 // LogVerbosity sets log verbosity level of  various components
