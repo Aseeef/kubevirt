@@ -20,10 +20,12 @@
 package device_manager
 
 import (
+	"bufio"
 	"fmt"
 	"math"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -175,6 +177,34 @@ func (c *DeviceController) NodeHasDevice(devicePath string) bool {
 	return err == nil
 }
 
+func (c *DeviceController) GetTDXVMLimit() int {
+	f, err := os.Open(path.Join(util.HostRootMount, "/sys/fs/cgroup/misc.capacity"))
+	if err != nil {
+		return 0
+	}
+	defer f.Close()
+	// File has lines in the format: "key [capacity]"
+	// key for tdx is "tdx"
+	// We need to find the line with "tdx" and return the capacity
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Split(line, " ")
+		if len(parts) != 2 {
+			continue
+		}
+		if parts[0] == "tdx" {
+			capacity, err := strconv.Atoi(parts[1])
+			if err != nil {
+				log.Log.Reason(err).Errorf("failed to parse TDX capacity value: %s", parts[1])
+				return 0
+			}
+			return capacity
+		}
+	}
+	return 0
+}
+
 // updatePermittedHostDevicePlugins returns a slice of device plugins for permitted devices which are present on the node
 func (c *DeviceController) updatePermittedHostDevicePlugins() []Device {
 	var permittedDevices []Device
@@ -188,16 +218,19 @@ func (c *DeviceController) updatePermittedHostDevicePlugins() []Device {
 		{"vhost-vsock", "/dev/vhost-vsock", c.virtConfig.VSOCKEnabled},
 	}
 
-	// Add QGS device plugin for TDX workloads
-	if c.virtConfig.WorkloadEncryptionTDXEnabled() {
-		socketDir := path.Dir(c.virtConfig.GetQGSSocketPath())
+	// Add TDX-QGS device plugin for TDX-enabled nodes:
+	// This plugin tracks available TDX "slots" on the node (there are a finite number of slots on a node)
+	// and ensures that the QGS socket can be mounted into Virt-Launcher Pods for attestation.
+	if maxTDXVMs := c.GetTDXVMLimit(); c.virtConfig.WorkloadEncryptionTDXEnabled() && maxTDXVMs > 0 {
+		socketDir := path.Dir(path.Join(util.HostRootMount, c.virtConfig.GetQGSSocketPath()))
 		socketName := path.Base(c.virtConfig.GetQGSSocketPath())
-		qgsPlugin, err := NewSocketDevicePlugin("qgs", socketDir, socketName, c.maxDevices, selinux.SELinuxExecutor{}, NewPermissionManager())
-		if err != nil {
-			log.DefaultLogger().Reason(err).Errorf("Failed to create QGS device plugin")
+		var tdxPlugin Device
+		if c.virtConfig.RequireQGS() {
+			tdxPlugin = NewSocketDevicePlugin("tdx", socketDir, socketName, maxTDXVMs, selinux.SELinuxExecutor{}, NewPermissionManager())
 		} else {
-			permittedDevices = append(permittedDevices, qgsPlugin)
+			tdxPlugin = NewOptionalSocketDevicePlugin("tdx", socketDir, socketName, maxTDXVMs, selinux.SELinuxExecutor{}, NewPermissionManager())
 		}
+		permittedDevices = append(permittedDevices, tdxPlugin)
 	}
 
 	for _, dev := range featureGatedDevices {

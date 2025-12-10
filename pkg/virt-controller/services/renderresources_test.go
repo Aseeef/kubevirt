@@ -448,14 +448,14 @@ var _ = Describe("Resource pod spec renderer", func() {
 		}))
 	})
 
-	It("WithQGS option adds QGS device resource", func() {
-		qgsResourceKey := kubev1.ResourceName("devices.kubevirt.io/qgs")
-		rr = NewResourceRenderer(nil, nil, WithQGS())
+	It("WithTDX option adds TDX device resource", func() {
+		tdxResourceKey := kubev1.ResourceName("devices.kubevirt.io/tdx")
+		rr = NewResourceRenderer(nil, nil, WithTDX())
 		Expect(rr.Requests()).To(Equal(kubev1.ResourceList{
-			qgsResourceKey: *resource.NewQuantity(1, resource.DecimalSI),
+			tdxResourceKey: *resource.NewQuantity(1, resource.DecimalSI),
 		}))
 		Expect(rr.Limits()).To(Equal(kubev1.ResourceList{
-			qgsResourceKey: *resource.NewQuantity(1, resource.DecimalSI),
+			tdxResourceKey: *resource.NewQuantity(1, resource.DecimalSI),
 		}))
 	})
 

@@ -31,6 +31,7 @@ import (
 
 	v1 "kubevirt.io/api/core/v1"
 
+	"kubevirt.io/kubevirt/pkg/pointer"
 	"kubevirt.io/kubevirt/pkg/virt-config/featuregate"
 )
 
@@ -104,24 +105,34 @@ func (c *ClusterConfig) AllowEmulation() bool {
 	return c.GetConfig().DeveloperConfiguration.UseEmulation
 }
 
-func (config *ClusterConfig) RequireQGS() bool {
-	if !config.WorkloadEncryptionTDXEnabled() {
-		return false
+func (c *ClusterConfig) GetTDXConfiguration() v1.TDXConfiguration {
+	cfg := c.GetConfig()
+	// Get TDXConfiguration with sane defaults if something is not set
+	if cfg.ConfidentialCompute == nil ||
+		cfg.ConfidentialCompute.TDX == nil {
+		return v1.TDXConfiguration{
+			Attestation: pointer.P(v1.TDXAttestationConfiguration{
+				Enforced:      pointer.P(false),
+				QgsSocketPath: pointer.P(DefaultQGSSocketPath),
+			}),
+		}
 	}
-	qgs := config.GetConfig().QGS
-	// When QGS or QGS.Enabled is not set, we default to true.
-	if qgs == nil || qgs.Enabled == nil {
-		return true
+	tdx := *cfg.ConfidentialCompute.TDX
+	if tdx.Attestation == nil {
+		tdx.Attestation = pointer.P(v1.TDXAttestationConfiguration{
+			Enforced:      pointer.P(false),
+			QgsSocketPath: pointer.P(DefaultQGSSocketPath),
+		})
 	}
-	return *qgs.Enabled
+	return tdx
+}
+
+func (c *ClusterConfig) RequireQGS() bool {
+	return *c.getTDXConfiguration().Attestation.Enforced
 }
 
 func (c *ClusterConfig) GetQGSSocketPath() string {
-	qgs := c.GetConfig().QGS
-	if qgs == nil || qgs.QgsSocketPath == nil {
-		return DefaultQGSSocketPath
-	}
-	return *qgs.QgsSocketPath
+	return *c.getTDXConfiguration().Attestation.QgsSocketPath
 }
 
 func (c *ClusterConfig) GetMigrationConfiguration() *v1.MigrationConfiguration {

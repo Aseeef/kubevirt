@@ -347,9 +347,7 @@ var _ = Describe("Apply Apps", func() {
 				nil,
 				virtHandlerConfig.GetVerbosity(),
 				virtHandlerConfig.GetExtraEnv(),
-				false,
-				false,
-				"")
+				false)
 			markHandlerReady(daemonSet)
 			daemonSet.UID = "random-id"
 			daemonSet.Generation = 1

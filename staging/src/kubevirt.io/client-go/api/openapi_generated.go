@@ -377,6 +377,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"kubevirt.io/api/core/v1.ClusterProfilerResults":                                                  schema_kubevirtio_api_core_v1_ClusterProfilerResults(ref),
 		"kubevirt.io/api/core/v1.CommonInstancetypesDeployment":                                           schema_kubevirtio_api_core_v1_CommonInstancetypesDeployment(ref),
 		"kubevirt.io/api/core/v1.ComponentConfig":                                                         schema_kubevirtio_api_core_v1_ComponentConfig(ref),
+		"kubevirt.io/api/core/v1.ConfidentialComputeConfiguration":                                        schema_kubevirtio_api_core_v1_ConfidentialComputeConfiguration(ref),
 		"kubevirt.io/api/core/v1.ConfigDriveSSHPublicKeyAccessCredentialPropagation":                      schema_kubevirtio_api_core_v1_ConfigDriveSSHPublicKeyAccessCredentialPropagation(ref),
 		"kubevirt.io/api/core/v1.ConfigMapVolumeSource":                                                   schema_kubevirtio_api_core_v1_ConfigMapVolumeSource(ref),
 		"kubevirt.io/api/core/v1.ContainerDiskInfo":                                                       schema_kubevirtio_api_core_v1_ContainerDiskInfo(ref),
@@ -506,7 +507,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"kubevirt.io/api/core/v1.PreferenceMatcher":                                                       schema_kubevirtio_api_core_v1_PreferenceMatcher(ref),
 		"kubevirt.io/api/core/v1.Probe":                                                                   schema_kubevirtio_api_core_v1_Probe(ref),
 		"kubevirt.io/api/core/v1.ProfilerResult":                                                          schema_kubevirtio_api_core_v1_ProfilerResult(ref),
-		"kubevirt.io/api/core/v1.QGSConfiguration":                                                        schema_kubevirtio_api_core_v1_QGSConfiguration(ref),
 		"kubevirt.io/api/core/v1.QemuGuestAgentSSHPublicKeyAccessCredentialPropagation":                   schema_kubevirtio_api_core_v1_QemuGuestAgentSSHPublicKeyAccessCredentialPropagation(ref),
 		"kubevirt.io/api/core/v1.QemuGuestAgentUserPasswordAccessCredentialPropagation":                   schema_kubevirtio_api_core_v1_QemuGuestAgentUserPasswordAccessCredentialPropagation(ref),
 		"kubevirt.io/api/core/v1.RESTClientConfiguration":                                                 schema_kubevirtio_api_core_v1_RESTClientConfiguration(ref),
@@ -543,6 +543,8 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"kubevirt.io/api/core/v1.SyNICTimer":                                                              schema_kubevirtio_api_core_v1_SyNICTimer(ref),
 		"kubevirt.io/api/core/v1.SysprepSource":                                                           schema_kubevirtio_api_core_v1_SysprepSource(ref),
 		"kubevirt.io/api/core/v1.TDX":                                                                     schema_kubevirtio_api_core_v1_TDX(ref),
+		"kubevirt.io/api/core/v1.TDXAttestationConfiguration":                                             schema_kubevirtio_api_core_v1_TDXAttestationConfiguration(ref),
+		"kubevirt.io/api/core/v1.TDXConfiguration":                                                        schema_kubevirtio_api_core_v1_TDXConfiguration(ref),
 		"kubevirt.io/api/core/v1.TLSConfiguration":                                                        schema_kubevirtio_api_core_v1_TLSConfiguration(ref),
 		"kubevirt.io/api/core/v1.TPMDevice":                                                               schema_kubevirtio_api_core_v1_TPMDevice(ref),
 		"kubevirt.io/api/core/v1.Timer":                                                                   schema_kubevirtio_api_core_v1_Timer(ref),
@@ -19432,6 +19434,26 @@ func schema_kubevirtio_api_core_v1_ComponentConfig(ref common.ReferenceCallback)
 	}
 }
 
+func schema_kubevirtio_api_core_v1_ConfidentialComputeConfiguration(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"tdx": {
+						SchemaProps: spec.SchemaProps{
+							Description: "TDX configuration for attestation on the Intel TDX Platform",
+							Ref:         ref("kubevirt.io/api/core/v1.TDXConfiguration"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"kubevirt.io/api/core/v1.TDXConfiguration"},
+	}
+}
+
 func schema_kubevirtio_api_core_v1_ConfigDriveSSHPublicKeyAccessCredentialPropagation(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -22857,17 +22879,17 @@ func schema_kubevirtio_api_core_v1_KubeVirtConfiguration(ref common.ReferenceCal
 							Ref:         ref("kubevirt.io/api/core/v1.ChangedBlockTrackingSelectors"),
 						},
 					},
-					"qgs-tdx": {
+					"confidentialCompute": {
 						SchemaProps: spec.SchemaProps{
 							Description: "QGS configuration for attestation on the Intel TDX Platform",
-							Ref:         ref("kubevirt.io/api/core/v1.QGSConfiguration"),
+							Ref:         ref("kubevirt.io/api/core/v1.ConfidentialComputeConfiguration"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/apis/meta/v1.LabelSelector", "kubevirt.io/api/core/v1.ArchConfiguration", "kubevirt.io/api/core/v1.ChangedBlockTrackingSelectors", "kubevirt.io/api/core/v1.CommonInstancetypesDeployment", "kubevirt.io/api/core/v1.DeveloperConfiguration", "kubevirt.io/api/core/v1.InstancetypeConfiguration", "kubevirt.io/api/core/v1.KSMConfiguration", "kubevirt.io/api/core/v1.LiveUpdateConfiguration", "kubevirt.io/api/core/v1.MediatedDevicesConfiguration", "kubevirt.io/api/core/v1.MigrationConfiguration", "kubevirt.io/api/core/v1.NetworkConfiguration", "kubevirt.io/api/core/v1.PermittedHostDevices", "kubevirt.io/api/core/v1.QGSConfiguration", "kubevirt.io/api/core/v1.ReloadableComponentConfiguration", "kubevirt.io/api/core/v1.SMBiosConfiguration", "kubevirt.io/api/core/v1.SeccompConfiguration", "kubevirt.io/api/core/v1.SupportContainerResources", "kubevirt.io/api/core/v1.TLSConfiguration", "kubevirt.io/api/core/v1.VirtualMachineOptions"},
+			"k8s.io/apimachinery/pkg/api/resource.Quantity", "k8s.io/apimachinery/pkg/apis/meta/v1.LabelSelector", "kubevirt.io/api/core/v1.ArchConfiguration", "kubevirt.io/api/core/v1.ChangedBlockTrackingSelectors", "kubevirt.io/api/core/v1.CommonInstancetypesDeployment", "kubevirt.io/api/core/v1.ConfidentialComputeConfiguration", "kubevirt.io/api/core/v1.DeveloperConfiguration", "kubevirt.io/api/core/v1.InstancetypeConfiguration", "kubevirt.io/api/core/v1.KSMConfiguration", "kubevirt.io/api/core/v1.LiveUpdateConfiguration", "kubevirt.io/api/core/v1.MediatedDevicesConfiguration", "kubevirt.io/api/core/v1.MigrationConfiguration", "kubevirt.io/api/core/v1.NetworkConfiguration", "kubevirt.io/api/core/v1.PermittedHostDevices", "kubevirt.io/api/core/v1.ReloadableComponentConfiguration", "kubevirt.io/api/core/v1.SMBiosConfiguration", "kubevirt.io/api/core/v1.SeccompConfiguration", "kubevirt.io/api/core/v1.SupportContainerResources", "kubevirt.io/api/core/v1.TLSConfiguration", "kubevirt.io/api/core/v1.VirtualMachineOptions"},
 	}
 }
 
@@ -24829,33 +24851,6 @@ func schema_kubevirtio_api_core_v1_ProfilerResult(ref common.ReferenceCallback) 
 	}
 }
 
-func schema_kubevirtio_api_core_v1_QGSConfiguration(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "QGSConfiguration holds QGS configuration",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"enabled": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Indicates whether TDX VM should require QGS in order to be scheduled, defaults to true",
-							Type:        []string{"boolean"},
-							Format:      "",
-						},
-					},
-					"qgsSocketPath": {
-						SchemaProps: spec.SchemaProps{
-							Description: "QGS socket path, defaults to /var/run/tdx-qgs/qgs.socket",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
 func schema_kubevirtio_api_core_v1_QemuGuestAgentSSHPublicKeyAccessCredentialPropagation(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -25937,6 +25932,52 @@ func schema_kubevirtio_api_core_v1_TDX(ref common.ReferenceCallback) common.Open
 				Type: []string{"object"},
 			},
 		},
+	}
+}
+
+func schema_kubevirtio_api_core_v1_TDXAttestationConfiguration(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "QGSConfiguration holds QGS configuration",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"enforced": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Indicates whether TDX VM should enforce the existence of QGS (required for attestation) in order to be scheduled, defaults to false",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"qgsSocketPath": {
+						SchemaProps: spec.SchemaProps{
+							Description: "QGS socket path, defaults to /var/run/tdx-qgs/qgs.socket",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func schema_kubevirtio_api_core_v1_TDXConfiguration(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"attestation": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("kubevirt.io/api/core/v1.TDXAttestationConfiguration"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"kubevirt.io/api/core/v1.TDXAttestationConfiguration"},
 	}
 }
 

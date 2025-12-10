@@ -37,8 +37,6 @@ import (
 	v1 "kubevirt.io/api/core/v1"
 	"kubevirt.io/client-go/log"
 
-	virtconfig "kubevirt.io/kubevirt/pkg/virt-config"
-
 	"kubevirt.io/kubevirt/pkg/virt-config/featuregate"
 )
 
@@ -82,12 +80,6 @@ const (
 
 	// lookup key in AdditionalProperties
 	AdditionalPropertiesMigrationNetwork = "MigrationNetwork"
-
-	// lookup key in AdditionalProperties
-	AdditionalPropertiesQGSSocketPath = "QGSSocketPath"
-
-	// lookup key in AdditionalProperties
-	AdditionalPropertiesWorkloadEncryptionTDXEnabled = "WorkloadEncryptionTDXEnabled"
 
 	// lookup key in AdditionalProperties
 	AdditionalPropertiesPersistentReservationEnabled = "PersistentReservationEnabled"
@@ -171,13 +163,7 @@ func GetTargetConfigFromKVWithEnvVarManager(kv *v1.KubeVirt, envVarManager EnvVa
 			if v == featuregate.PersistentReservation {
 				additionalProperties[AdditionalPropertiesPersistentReservationEnabled] = ""
 			}
-			if v == featuregate.WorkloadEncryptionTDX {
-				additionalProperties[AdditionalPropertiesWorkloadEncryptionTDXEnabled] = ""
-			}
 		}
-	}
-	if kv.Spec.Configuration.DeveloperConfiguration != nil && kv.Spec.Configuration.QGS != nil && kv.Spec.Configuration.QGS.QgsSocketPath != nil {
-		additionalProperties[AdditionalPropertiesQGSSocketPath] = *kv.Spec.Configuration.QGS.QgsSocketPath
 	}
 	// don't use status.target* here, as that is always set, but we need to know if it was set by the spec and with that
 	// overriding shasums from env vars
@@ -503,19 +489,6 @@ func (c *KubeVirtDeploymentConfig) GetImagePullSecrets() []k8sv1.LocalObjectRefe
 		return data
 	}
 	return data
-}
-
-func (c *KubeVirtDeploymentConfig) GetQGSSocketPath() string {
-	value, enabled := c.AdditionalProperties[AdditionalPropertiesQGSSocketPath]
-	if enabled {
-		return value
-	}
-	return virtconfig.DefaultQGSSocketPath
-}
-
-func (c *KubeVirtDeploymentConfig) WorkloadEncryptionTDXEnabled() bool {
-	_, enabled := c.AdditionalProperties[AdditionalPropertiesWorkloadEncryptionTDXEnabled]
-	return enabled
 }
 
 func (c *KubeVirtDeploymentConfig) PersistentReservationEnabled() bool {

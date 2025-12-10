@@ -375,10 +375,10 @@ func WithSEV() ResourceRendererOption {
 	}
 }
 
-func WithQGS() ResourceRendererOption {
+func WithTDX() ResourceRendererOption {
 	return func(renderer *ResourceRenderer) {
 		resources := renderer.ResourceRequirements()
-		requestResource(&resources, QgsDevice)
+		requestResource(&resources, TdxDevice)
 		copyResources(resources.Limits, renderer.calculatedLimits)
 		copyResources(resources.Requests, renderer.calculatedRequests)
 	}

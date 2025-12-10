@@ -962,6 +962,27 @@ var CRDsValidation map[string]string = map[string]string{
                   nullable: true
                   type: boolean
               type: object
+            confidentialCompute:
+              description: QGS configuration for attestation on the Intel TDX Platform
+              properties:
+                tdx:
+                  description: TDX configuration for attestation on the Intel TDX
+                    Platform
+                  properties:
+                    attestation:
+                      description: QGSConfiguration holds QGS configuration
+                      properties:
+                        enforced:
+                          description: Indicates whether TDX VM should enforce the
+                            existence of QGS (required for attestation) in order to
+                            be scheduled, defaults to false
+                          type: boolean
+                        qgsSocketPath:
+                          description: QGS socket path, defaults to /var/run/tdx-qgs/qgs.socket
+                          type: string
+                      type: object
+                  type: object
+              type: object
             controllerConfiguration:
               description: |-
                 ReloadableComponentConfiguration holds all generic k8s configuration options which can
@@ -1568,17 +1589,6 @@ var CRDsValidation map[string]string = map[string]string{
                     type: object
                   type: array
                   x-kubernetes-list-type: atomic
-              type: object
-            qgs-tdx:
-              description: QGS configuration for attestation on the Intel TDX Platform
-              properties:
-                enabled:
-                  description: Indicates whether TDX VM should require QGS in order
-                    to be scheduled, defaults to true
-                  type: boolean
-                qgsSocketPath:
-                  description: QGS socket path, defaults to /var/run/tdx-qgs/qgs.socket
-                  type: string
               type: object
             seccompConfiguration:
               description: SeccompConfiguration holds Seccomp configuration for Kubevirt

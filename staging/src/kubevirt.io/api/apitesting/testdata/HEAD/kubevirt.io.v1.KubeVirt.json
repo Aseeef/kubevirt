@@ -404,9 +404,13 @@
           ]
         }
       },
-      "qgs-tdx": {
-        "enabled": true,
-        "qgsSocketPath": "qgsSocketPathValue"
+      "confidentialCompute": {
+        "tdx": {
+          "attestation": {
+            "enforced": true,
+            "qgsSocketPath": "qgsSocketPathValue"
+          }
+        }
       }
     },
     "infra": {
