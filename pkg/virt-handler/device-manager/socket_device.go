@@ -42,22 +42,6 @@ import (
 	"kubevirt.io/kubevirt/pkg/virt-handler/selinux"
 )
 
-//go:generate mockgen -source $GOFILE -package=$GOPACKAGE -destination=generated_mock_$GOFILE
-
-type PermissionManager interface {
-	ChownAtNoFollow(path *safepath.Path, uid, gid int) error
-}
-
-type permissionManager struct{}
-
-func NewPermissionManager() PermissionManager {
-	return &permissionManager{}
-}
-
-func (p *permissionManager) ChownAtNoFollow(path *safepath.Path, uid, gid int) error {
-	return safepath.ChownAtNoFollow(path, uid, gid)
-}
-
 type SocketDevicePlugin struct {
 	*DevicePluginBase
 	socketDir  string
