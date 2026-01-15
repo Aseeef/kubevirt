@@ -223,3 +223,9 @@ func (dpi *SocketDevicePlugin) healthCheck() error {
 		}
 	}
 }
+
+func (dpi *SocketDevicePlugin) GetIDDeviceNameFunc(_ string) string {
+	// don't worry about the device id here, since it's the same underlying device
+	devicePath := filepath.Join(dpi.deviceRoot, dpi.devicePath)
+	return fmt.Sprintf("socket device (%s)", devicePath)
+}

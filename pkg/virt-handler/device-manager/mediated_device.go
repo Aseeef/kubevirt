@@ -22,7 +22,6 @@ package device_manager
 import (
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,6 +79,8 @@ func NewMediatedDevicePlugin(mdevs []*MDEV, resourceName string) *MediatedDevice
 		},
 		iommuToMDEVMap: iommuToMDEVMap,
 	}
+
+	dpi.GetIDDeviceName = dpi.GetIDDeviceNameFunc
 
 	return dpi
 }
@@ -278,6 +279,14 @@ func (dpi *MediatedDevicePlugin) healthCheck() error {
 			}
 		}
 	}
+}
+
+func (dpi *MediatedDevicePlugin) GetIDDeviceNameFunc(monDevId string) string {
+	mdev, ok := dpi.iommuToMDEVMap[monDevId]
+	if !ok {
+		mdev = "not recognized"
+	}
+	return fmt.Sprintf("mediated device (mdev=%s, id=%s)", mdev, monDevId)
 }
 
 func getMdevTypeName(mdevUUID string) (string, error) {

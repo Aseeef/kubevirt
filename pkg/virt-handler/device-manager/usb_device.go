@@ -572,5 +572,10 @@ func NewUSBDevicePlugin(resourceName string, pluginDevices []*PluginDevices) *US
 		devices: pluginDevices,
 		logger:  log.Log.With("subcomponent", resourceID),
 	}
+	usb.GetIDDeviceName = usb.GetIDDeviceNameFunc
 	return usb
+}
+
+func (plugin *USBDevicePlugin) GetIDDeviceNameFunc(devGroupID string) string {
+	return fmt.Sprintf("USB device group (%s)", devGroupID)
 }

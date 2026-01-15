@@ -23,15 +23,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
-	"google.golang.org/grpc"
-
 	v1 "kubevirt.io/api/core/v1"
 	"kubevirt.io/client-go/log"
 
@@ -205,6 +202,14 @@ func (dpi *PCIDevicePlugin) healthCheck() error {
 			}
 		}
 	}
+}
+
+func (dpi *PCIDevicePlugin) GetIDDeviceNameFunc(monDevId string) string {
+	pciID, ok := dpi.iommuToPCIMap[monDevId]
+	if !ok {
+		pciID = "not recognized"
+	}
+	return fmt.Sprintf("PCI device (pciAddr=%s, id=%s)", pciID, monDevId)
 }
 
 func discoverPermittedHostPCIDevices(supportedPCIDeviceMap map[string]string) map[string][]*PCIDevice {

@@ -27,7 +27,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/fsnotify/fsnotify"
 
@@ -69,6 +68,7 @@ func NewGenericDevicePlugin(deviceName string, devicePath string, maxDevices int
 			Health: pluginapi.Unhealthy,
 		})
 	}
+	dpi.GetIDDeviceName = dpi.GetIDDeviceNameFunc
 	dpi.SetupDevicePlugin = dpi.SetupDevicePluginFunc
 	return dpi
 }
@@ -221,14 +221,8 @@ func (dpi *GenericDevicePlugin) healthCheck() error {
 	}
 }
 
-func (dpi *GenericDevicePlugin) GetInitialized() bool {
-	dpi.lock.Lock()
-	defer dpi.lock.Unlock()
-	return dpi.initialized
-}
-
-func (dpi *GenericDevicePlugin) setInitialized(initialized bool) {
-	dpi.lock.Lock()
-	defer dpi.lock.Unlock()
-	dpi.initialized = initialized
+func (dpi *GenericDevicePlugin) GetIDDeviceNameFunc(_ string) string {
+	// don't worry about the device id here, since it's the same underlying device
+	devicePath := filepath.Join(dpi.deviceRoot, dpi.devicePath)
+	return fmt.Sprintf("generic device (%s)", devicePath)
 }
