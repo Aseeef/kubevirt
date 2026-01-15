@@ -305,7 +305,7 @@ func (plugin *USBDevicePlugin) ListAndWatch(_ *pluginapi.Empty, lws pluginapi.De
 }
 
 // Interface to allocate requested Device, exported by ListAndWatch
-func (plugin *USBDevicePlugin) Allocate(_ context.Context, allocRequest *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
+func (plugin *USBDevicePlugin) AllocateDPFunc(_ context.Context, allocRequest *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
 	allocResponse := new(pluginapi.AllocateResponse)
 	env := make(map[string]string)
 	for _, request := range allocRequest.ContainerRequests {
@@ -573,6 +573,7 @@ func NewUSBDevicePlugin(resourceName string, pluginDevices []*PluginDevices) *US
 		logger:  log.Log.With("subcomponent", resourceID),
 	}
 	usb.GetIDDeviceName = usb.GetIDDeviceNameFunc
+	usb.AllocateDP = usb.AllocateDPFunc
 	return usb
 }
 

@@ -119,7 +119,8 @@ func NewSocketDevicePlugin(socketName, socketDir, socket string, maxDevices int,
 	if err := dpi.setSocketPermissions(); err != nil {
 		return nil, err
 	}
-
+	dpi.GetIDDeviceName = dpi.GetIDDeviceNameFunc
+	dpi.AllocateDP = dpi.AllocateDPFunc
 	return dpi, nil
 }
 
@@ -145,9 +146,10 @@ func (dpi *SocketDevicePlugin) register() error {
 	return nil
 }
 
-func (dpi *SocketDevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
-	log.DefaultLogger().Infof("Socket Allocate: resourceName: %s", dpi.socketName)
+func (dpi *SocketDevicePlugin) AllocateDPFunc(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
+	log.DefaultLogger().Infof("Socket Allocate: resourceName: %s", dpi.resourceName)
 	log.DefaultLogger().Infof("Socket Allocate: request: %v", r.ContainerRequests)
+
 	response := pluginapi.AllocateResponse{}
 	containerResponse := new(pluginapi.ContainerAllocateResponse)
 
