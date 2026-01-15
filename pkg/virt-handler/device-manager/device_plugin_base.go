@@ -60,9 +60,10 @@ type DevicePluginBase struct {
 	initialized       bool
 	lock              *sync.Mutex
 	deregistered      chan struct{}
-	deviceRoot        string       // Root directory where the device is located
-	devicePath        string       // Relative path to the device from the device root
-	SetupDevicePlugin func() error // Optional function to perform additional setup steps that are not covered by the default implementation
+	deviceRoot        string                       // Root directory where the device is located
+	devicePath        string                       // Relative path to the device from the device root
+	SetupDevicePlugin func() error                 // Optional function to perform additional setup steps that are not covered by the default implementation
+	GetIDDeviceName   func(deviceID string) string // Optional function to convert device id to a human-readable name for logging
 }
 
 func (dpi *DevicePluginBase) GetResourceName() string {
@@ -152,6 +153,13 @@ func (dpi *DevicePluginBase) ListAndWatch(_ *pluginapi.Empty, s pluginapi.Device
 	}
 	close(dpi.deregistered)
 	return nil
+}
+
+func (dpi *DevicePluginBase) getFriendlyName(deviceID string) string {
+	if dpi.GetIDDeviceName == nil {
+		return "device plugin (" + deviceID + ")"
+	}
+	return dpi.GetIDDeviceName(deviceID)
 }
 
 func (dpi *DevicePluginBase) PreStartContainer(_ context.Context, _ *pluginapi.PreStartContainerRequest) (*pluginapi.PreStartContainerResponse, error) {
