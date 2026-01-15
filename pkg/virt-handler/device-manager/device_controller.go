@@ -21,12 +21,10 @@ package device_manager
 
 import (
 	"bufio"
-	"bufio"
 	"fmt"
 	"math"
 	"os"
 	"path"
-	"strconv"
 	"strconv"
 	"strings"
 	"sync"
