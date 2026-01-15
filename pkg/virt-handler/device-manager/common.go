@@ -256,6 +256,6 @@ func formatVFIODeviceSpecs(devID string) []*v1beta1.DeviceSpec {
 }
 
 type deviceHealth struct {
-	DevId  string
+	DevId  string // Note, when DevId is empty, it means the device is all devices
 	Health string
 }
