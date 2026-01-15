@@ -70,6 +70,7 @@ func NewGenericDevicePlugin(deviceName string, devicePath string, maxDevices int
 	}
 	dpi.GetIDDeviceName = dpi.GetIDDeviceNameFunc
 	dpi.SetupDevicePlugin = dpi.SetupDevicePluginFunc
+	dpi.AllocateDP = dpi.AllocateDPFunc
 	return dpi
 }
 
@@ -119,7 +120,7 @@ func (dpi *GenericDevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.Dev
 	return nil
 }
 
-func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
+func (dpi *GenericDevicePlugin) AllocateDPFunc(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
 	log.DefaultLogger().Infof("Generic Allocate: resourceName: %s", dpi.resourceName)
 	log.DefaultLogger().Infof("Generic Allocate: request: %v", r.ContainerRequests)
 	response := pluginapi.AllocateResponse{}

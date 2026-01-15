@@ -60,10 +60,11 @@ type DevicePluginBase struct {
 	initialized       bool
 	lock              *sync.Mutex
 	deregistered      chan struct{}
-	deviceRoot        string                       // Root directory where the device is located
-	devicePath        string                       // Relative path to the device from the device root
-	SetupDevicePlugin func() error                 // Optional function to perform additional setup steps that are not covered by the default implementation
-	GetIDDeviceName   func(deviceID string) string // Optional function to convert device id to a human-readable name for logging
+	deviceRoot        string                                                                                 // Root directory where the device is located
+	devicePath        string                                                                                 // Relative path to the device from the device root
+	AllocateDP        func(context.Context, *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) // REQUIRED function to allocate the device.
+	SetupDevicePlugin func() error                                                                           // Optional function to perform additional setup steps that are not covered by the default implementation
+	GetIDDeviceName   func(deviceID string) string                                                           // Optional function to convert device id to a human-readable name for logging
 }
 
 func (dpi *DevicePluginBase) GetResourceName() string {
@@ -175,19 +176,10 @@ func (dpi *DevicePluginBase) GetDevicePluginOptions(_ context.Context, _ *plugin
 }
 
 func (dpi *DevicePluginBase) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
-	log.DefaultLogger().Infof("Generic Allocate: resourceName: %s", dpi.resourceName)
-	log.DefaultLogger().Infof("Generic Allocate: request: %v", r.ContainerRequests)
-	response := pluginapi.AllocateResponse{}
-	containerResponse := new(pluginapi.ContainerAllocateResponse)
-
-	dev := new(pluginapi.DeviceSpec)
-	dev.HostPath = dpi.devicePath
-	dev.ContainerPath = dpi.devicePath
-	containerResponse.Devices = []*pluginapi.DeviceSpec{dev}
-
-	response.ContainerResponses = []*pluginapi.ContainerAllocateResponse{containerResponse}
-
-	return &response, nil
+	if dpi.AllocateDP != nil {
+		return dpi.AllocateDP(ctx, r)
+	}
+	return nil, fmt.Errorf("not implemented")
 }
 
 func (dpi *DevicePluginBase) stopDevicePlugin() error {
