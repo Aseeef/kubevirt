@@ -23,16 +23,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"google.golang.org/grpc"
 
 	"kubevirt.io/client-go/log"
 
@@ -55,151 +52,51 @@ type Device interface {
 }
 
 type GenericDevicePlugin struct {
-	devs         []*pluginapi.Device
-	server       *grpc.Server
-	socketPath   string
-	stop         <-chan struct{}
-	health       chan deviceHealth
-	devicePath   string
-	deviceName   string
-	resourceName string
-	done         chan struct{}
-	deviceRoot   string
-	preOpen      bool
-	initialized  bool
-	lock         *sync.Mutex
-	permissions  string
-	deregistered chan struct{}
+	*DevicePluginBase
+	preOpen     bool
+	permissions string
 }
 
 func NewGenericDevicePlugin(deviceName string, devicePath string, maxDevices int, permissions string, preOpen bool) *GenericDevicePlugin {
 	serverSock := SocketPath(deviceName)
 	dpi := &GenericDevicePlugin{
-		devs:         []*pluginapi.Device{},
-		socketPath:   serverSock,
-		health:       make(chan deviceHealth),
-		deviceName:   deviceName,
-		devicePath:   devicePath,
-		deviceRoot:   util.HostRootMount,
-		resourceName: fmt.Sprintf("%s/%s", DeviceNamespace, deviceName),
-		preOpen:      preOpen,
-		initialized:  false,
-		lock:         &sync.Mutex{},
-		permissions:  permissions,
+		DevicePluginBase: &DevicePluginBase{
+			devs:         []*pluginapi.Device{},
+			socketPath:   serverSock,
+			deviceRoot:   util.HostRootMount,
+			devicePath:   devicePath,
+			health:       make(chan deviceHealth),
+			done:         make(chan struct{}),
+			deregistered: make(chan struct{}),
+			resourceName: fmt.Sprintf("%s/%s", DeviceNamespace, deviceName),
+			initialized:  false,
+			lock:         &sync.Mutex{},
+		},
+		preOpen:     preOpen,
+		permissions: permissions,
 	}
 
-	for i := 0; i < maxDevices; i++ {
-		deviceId := dpi.deviceName + strconv.Itoa(i)
+	for i := range maxDevices {
+		deviceId := deviceName + strconv.Itoa(i)
 		dpi.devs = append(dpi.devs, &pluginapi.Device{
 			ID:     deviceId,
-			Health: pluginapi.Healthy,
+			Health: pluginapi.Unhealthy,
 		})
 	}
-
+	dpi.SetupDevicePlugin = dpi.SetupDevicePluginFunc
 	return dpi
 }
 
-func (dpi *GenericDevicePlugin) GetDeviceName() string {
-	return dpi.deviceName
-}
-
-// Start starts the device plugin
-func (dpi *GenericDevicePlugin) Start(stop <-chan struct{}) (err error) {
-	logger := log.DefaultLogger()
-	dpi.stop = stop
-	dpi.done = make(chan struct{})
-	dpi.deregistered = make(chan struct{})
-
-	err = dpi.cleanup()
-	if err != nil {
-		return err
-	}
-
+func (dpi *GenericDevicePlugin) SetupDevicePluginFunc() error {
 	// The kernel module(s) for some devices, like tun and vhost-net, auto-load when needed.
 	// That need is identified by the first access to their main device node.
 	// Opening and closing the device nodes here will trigger any necessary modprobe.
 	if dpi.preOpen {
-		devnode, err := os.Open(dpi.devicePath)
+		devicePath := filepath.Join(dpi.deviceRoot, dpi.devicePath)
+		devnode, err := os.Open(devicePath)
 		if err == nil {
 			devnode.Close()
 		}
-	}
-
-	sock, err := net.Listen("unix", dpi.socketPath)
-	if err != nil {
-		return fmt.Errorf("error creating GRPC server socket: %v", err)
-	}
-
-	dpi.server = grpc.NewServer([]grpc.ServerOption{}...)
-	defer dpi.stopDevicePlugin()
-
-	pluginapi.RegisterDevicePluginServer(dpi.server, dpi)
-
-	errChan := make(chan error, 2)
-
-	go func() {
-		errChan <- dpi.server.Serve(sock)
-	}()
-
-	err = waitForGRPCServer(dpi.socketPath, connectionTimeout)
-	if err != nil {
-		return fmt.Errorf("error starting the GRPC server: %v", err)
-	}
-
-	err = dpi.register()
-	if err != nil {
-		return fmt.Errorf("error registering with device plugin manager: %v", err)
-	}
-
-	go func() {
-		errChan <- dpi.healthCheck()
-	}()
-
-	dpi.setInitialized(true)
-	logger.Infof("%s device plugin started", dpi.deviceName)
-	err = <-errChan
-
-	return err
-}
-
-// Stop stops the gRPC server
-func (dpi *GenericDevicePlugin) stopDevicePlugin() error {
-	defer func() {
-		if !IsChanClosed(dpi.done) {
-			close(dpi.done)
-		}
-	}()
-
-	// Give the device plugin one second to properly deregister
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-	select {
-	case <-dpi.deregistered:
-	case <-ticker.C:
-	}
-	dpi.server.Stop()
-	dpi.setInitialized(false)
-	return dpi.cleanup()
-}
-
-// Register registers the device plugin for the given resourceName with Kubelet.
-func (dpi *GenericDevicePlugin) register() error {
-	conn, err := gRPCConnect(pluginapi.KubeletSocket, connectionTimeout)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	client := pluginapi.NewRegistrationClient(conn)
-	reqt := &pluginapi.RegisterRequest{
-		Version:      pluginapi.Version,
-		Endpoint:     path.Base(dpi.socketPath),
-		ResourceName: dpi.resourceName,
-	}
-
-	_, err = client.Register(context.Background(), reqt)
-	if err != nil {
-		return err
 	}
 	return nil
 }
@@ -230,14 +127,14 @@ func (dpi *GenericDevicePlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.Dev
 	// There exists no explicit way to deregister devices
 	emptyList := []*pluginapi.Device{}
 	if err := s.Send(&pluginapi.ListAndWatchResponse{Devices: emptyList}); err != nil {
-		log.DefaultLogger().Reason(err).Infof("%s device plugin failed to deregister", dpi.deviceName)
+		log.DefaultLogger().Reason(err).Infof("%s device plugin failed to deregister", dpi.resourceName)
 	}
 	close(dpi.deregistered)
 	return nil
 }
 
 func (dpi *GenericDevicePlugin) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
-	log.DefaultLogger().Infof("Generic Allocate: resourceName: %s", dpi.deviceName)
+	log.DefaultLogger().Infof("Generic Allocate: resourceName: %s", dpi.resourceName)
 	log.DefaultLogger().Infof("Generic Allocate: request: %v", r.ContainerRequests)
 	response := pluginapi.AllocateResponse{}
 	containerResponse := new(pluginapi.ContainerAllocateResponse)
@@ -324,14 +221,14 @@ func (dpi *GenericDevicePlugin) healthCheck() error {
 			if event.Name == devicePath {
 				// Health in this case is if the device path actually exists
 				if event.Op == fsnotify.Create {
-					logger.Infof("monitored device %s appeared", dpi.deviceName)
+					logger.Infof("monitored device %s appeared", dpi.resourceName)
 					dpi.health <- deviceHealth{Health: pluginapi.Healthy}
 				} else if (event.Op == fsnotify.Remove) || (event.Op == fsnotify.Rename) {
-					logger.Infof("monitored device %s disappeared", dpi.deviceName)
+					logger.Infof("monitored device %s disappeared", dpi.resourceName)
 					dpi.health <- deviceHealth{Health: pluginapi.Unhealthy}
 				}
 			} else if event.Name == dpi.socketPath && event.Op == fsnotify.Remove {
-				logger.Infof("device socket file for device %s was removed, kubelet probably restarted.", dpi.deviceName)
+				logger.Infof("device socket file for device %s was removed, kubelet probably restarted.", dpi.resourceName)
 				return nil
 			}
 		}

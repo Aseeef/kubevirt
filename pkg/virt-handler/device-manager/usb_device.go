@@ -90,51 +90,6 @@ func newPluginDevices(resourceName string, index int, usbdevs []*USBDevice) *Plu
 	}
 }
 
-func (plugin *USBDevicePlugin) Start(stop <-chan struct{}) error {
-	plugin.stop = stop
-
-	err := plugin.cleanup()
-	if err != nil {
-		return fmt.Errorf("error on cleanup: %v", err)
-	}
-
-	sock, err := net.Listen("unix", plugin.socketPath)
-	if err != nil {
-		return fmt.Errorf("error creating GRPC server socket: %v", err)
-	}
-
-	plugin.server = grpc.NewServer([]grpc.ServerOption{}...)
-	defer plugin.stopDevicePlugin()
-
-	pluginapi.RegisterDevicePluginServer(plugin.server, plugin)
-
-	errChan := make(chan error, 2)
-
-	go func() {
-		errChan <- plugin.server.Serve(sock)
-	}()
-
-	err = waitForGRPCServer(plugin.socketPath, 5*time.Second)
-	if err != nil {
-		return fmt.Errorf("error starting the GRPC server: %v", err)
-	}
-
-	err = plugin.register()
-	if err != nil {
-		return fmt.Errorf("error registering with device plugin manager: %v", err)
-	}
-
-	go func() {
-		errChan <- plugin.healthCheck()
-	}()
-
-	plugin.setInitialized(true)
-	plugin.logger.Infof("%s device plugin started", plugin.resourceName)
-	err = <-errChan
-
-	return err
-}
-
 func (pd *PluginDevices) toKubeVirtDevicePlugin() *pluginapi.Device {
 	healthStr := pluginapi.Healthy
 	if !pd.isHealthy {
