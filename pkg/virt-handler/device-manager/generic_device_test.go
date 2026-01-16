@@ -21,15 +21,18 @@ package device_manager
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
 
+	"kubevirt.io/kubevirt/pkg/safepath"
 	pluginapi "kubevirt.io/kubevirt/pkg/virt-handler/device-manager/deviceplugin/v1beta1"
 )
 
@@ -49,13 +52,11 @@ var _ = Describe("Generic Device", func() {
 		dpi = NewGenericDevicePlugin("foo", devicePath, 1, "rw", true)
 		dpi.socketPath = filepath.Join(workDir, "test.sock")
 		dpi.server = grpc.NewServer([]grpc.ServerOption{}...)
-		dpi.done = make(chan struct{})
 		dpi.deviceRoot = "/"
 		stop := make(chan struct{})
 		dpi.stop = stop
 		DeferCleanup(func() {
 			close(stop)
-			os.RemoveAll(workDir)
 		})
 
 	})
@@ -64,12 +65,15 @@ var _ = Describe("Generic Device", func() {
 		os.OpenFile(dpi.socketPath, os.O_RDONLY|os.O_CREATE, 0666)
 
 		errChan := make(chan error, 1)
-		go func(errChan chan error) {
-			errChan <- dpi.healthCheck()
-		}(errChan)
-		Consistently(func() string {
-			return dpi.devs[0].Health
-		}, 500*time.Millisecond, 100*time.Millisecond).Should(Equal(pluginapi.Healthy))
+		healthCheckContext, err := dpi.setupHealthCheckContext()
+		Expect(err).ToNot(HaveOccurred())
+		go func() {
+			errChan <- dpi.healthCheck(healthCheckContext)
+		}()
+
+		By("waiting for initial healthcheck to send Healthy message")
+		Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Healthy))))
+
 		Expect(os.Remove(dpi.socketPath)).To(Succeed())
 
 		Eventually(errChan, 5*time.Second).Should(Receive(Not(HaveOccurred())))
@@ -79,10 +83,14 @@ var _ = Describe("Generic Device", func() {
 
 		os.OpenFile(dpi.socketPath, os.O_RDONLY|os.O_CREATE, 0666)
 
-		go dpi.healthCheck()
-		Consistently(func() string {
-			return dpi.devs[0].Health
-		}, 500*time.Millisecond, 100*time.Millisecond).Should(Equal(pluginapi.Healthy))
+		By("Confirming that the device begins as unhealthy")
+		expectAllDevHealthIs(dpi.devs, pluginapi.Unhealthy)
+
+		By("waiting for initial healthcheck to send Healthy message")
+		healthCheckContext, err := dpi.setupHealthCheckContext()
+		Expect(err).ToNot(HaveOccurred())
+		go dpi.healthCheck(healthCheckContext)
+		Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Healthy))))
 
 		By("Removing a (fake) device node")
 		os.Remove(devicePath)
@@ -95,6 +103,45 @@ var _ = Describe("Generic Device", func() {
 
 		By("waiting for healthcheck to send Healthy message")
 		Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Healthy))))
+	})
+
+	It("Should mark device unhealthy if ConfigurePermissions fails", func() {
+		os.OpenFile(dpi.socketPath, os.O_RDONLY|os.O_CREATE, 0666)
+
+		// Mock ConfigurePermissions to fail
+		dpi.configurePermissions = func(_ *safepath.Path) error {
+			return fmt.Errorf("mock permission error")
+		}
+
+		By("waiting for initial healthcheck to send Unhealthy message due to permission failure")
+		healthCheckContext, err := dpi.setupHealthCheckContext()
+		Expect(err).ToNot(HaveOccurred())
+		go dpi.healthCheck(healthCheckContext)
+		Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Unhealthy))))
+	})
+
+	It("Should setup watcher for device directory", func() {
+		watcher, err := fsnotify.NewWatcher()
+		Expect(err).ToNot(HaveOccurred())
+		defer watcher.Close()
+
+		monitoredDevices := make(map[string]string)
+		err = dpi.setupMonitoredDevicesFunc(watcher, monitoredDevices)
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(monitoredDevices).To(HaveLen(1))
+		Expect(watcher.WatchList()).To(ContainElement(workDir))
+	})
+
+	It("Should return error if device directory cannot be watched", func() {
+		badDpi := NewGenericDevicePlugin("foo", "/nonexistent/device", 1, "rw", true)
+		badDpi.deviceRoot = "/"
+
+		watcher, _ := fsnotify.NewWatcher()
+		defer watcher.Close()
+
+		err := badDpi.setupMonitoredDevicesFunc(watcher, make(map[string]string))
+		Expect(err).To(MatchError(ContainSubstring("no such file or directory")))
 	})
 
 	It("Should allocate the device", func() {

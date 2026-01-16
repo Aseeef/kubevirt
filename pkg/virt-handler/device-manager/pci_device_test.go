@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -217,7 +218,7 @@ var _ = Describe("PCI Device Health check validation", func() {
 		vfioDevice := filepath.Join(vfioDeviceDir, fakeIommuGroup)
 		createFile(vfioDevice)
 
-		// Create mediated device plugin
+		// Create PCI device plugin
 		pciDevices := []*PCIDevice{
 			{
 				pciID:      fakeID,
@@ -244,15 +245,83 @@ var _ = Describe("PCI Device Health check validation", func() {
 		os.OpenFile(dpi.socketPath, os.O_RDONLY|os.O_CREATE, 0666)
 
 		errChan := make(chan error, 1)
-		go func(errChan chan error) {
-			errChan <- dpi.healthCheck()
-		}(errChan)
-		Consistently(func() string {
-			return dpi.devs[0].Health
-		}, 500*time.Millisecond, 100*time.Millisecond).Should(Equal(pluginapi.Healthy))
+		healthCheckContext, err := dpi.setupHealthCheckContext()
+		Expect(err).ToNot(HaveOccurred())
+		go func() {
+			errChan <- dpi.healthCheck(healthCheckContext)
+		}()
+
+		By("waiting for initial healthchecks to send Healthy message for each device")
+		for range dpi.devs {
+			Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Healthy))))
+		}
+
 		Expect(os.Remove(dpi.socketPath)).To(Succeed())
 
 		Eventually(errChan, 5*time.Second).Should(Receive(Not(HaveOccurred())))
+	})
+
+	It("Should monitor health of device node", func() {
+		os.OpenFile(dpi.socketPath, os.O_RDONLY|os.O_CREATE, 0666)
+		vfioDevicePath := filepath.Join(vfioDeviceDir, fakeIommuGroup)
+
+		By("Confirming that the device begins as unhealthy")
+		expectAllDevHealthIs(dpi.devs, pluginapi.Unhealthy)
+
+		By("waiting for initial healthchecks to send Healthy message")
+		healthCheckContext, err := dpi.setupHealthCheckContext()
+		Expect(err).ToNot(HaveOccurred())
+		go dpi.healthCheck(healthCheckContext)
+		for range dpi.devs {
+			Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Healthy))))
+		}
+
+		By("Removing a (fake) vfio device node")
+		os.Remove(vfioDevicePath)
+
+		By("waiting for healthcheck to send Unhealthy message")
+		for range dpi.devs {
+			Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Unhealthy))))
+		}
+
+		By("Creating a new (fake) vfio device node")
+		createFile(vfioDevicePath)
+
+		By("waiting for healthcheck to send Healthy message")
+		for range dpi.devs {
+			Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Healthy))))
+		}
+	})
+
+	It("Should setup watcher for VFIO devices", func() {
+		workDir := GinkgoT().TempDir()
+		vfioDir := filepath.Join(workDir, "dev", "vfio")
+		Expect(os.MkdirAll(vfioDir, 0755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(vfioDir, "0"), []byte{}, 0644)).To(Succeed())
+
+		dpi := NewPCIDevicePlugin([]*PCIDevice{{iommuGroup: "0"}}, fakeName)
+		dpi.deviceRoot = workDir
+		dpi.devicePath = "/dev/vfio"
+
+		watcher, _ := fsnotify.NewWatcher()
+		defer watcher.Close()
+
+		monitoredDevices := make(map[string]string)
+		Expect(dpi.setupMonitoredDevicesFunc(watcher, monitoredDevices)).To(Succeed())
+		Expect(monitoredDevices).To(HaveLen(1))
+		Expect(watcher.WatchList()).To(ContainElement(vfioDir))
+	})
+
+	It("Should return error if device directory cannot be watched", func() {
+		dpi := NewPCIDevicePlugin([]*PCIDevice{{iommuGroup: "0"}}, fakeName)
+		dpi.deviceRoot = "/nonexistent"
+		dpi.devicePath = "/dev/vfio"
+
+		watcher, _ := fsnotify.NewWatcher()
+		defer watcher.Close()
+
+		err := dpi.setupMonitoredDevicesFunc(watcher, make(map[string]string))
+		Expect(err).To(MatchError(ContainSubstring("failed to add device directory")))
 	})
 
 	It("Should allocate the device", func() {
@@ -277,5 +346,4 @@ var _ = Describe("PCI Device Health check validation", func() {
 			Expect(val).To(Equal(fakeAddress))
 		}
 	})
-
 })

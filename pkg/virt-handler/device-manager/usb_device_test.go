@@ -20,11 +20,13 @@
 package device_manager
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
@@ -109,18 +111,58 @@ var _ = Describe("USB Device", func() {
 		os.OpenFile(dpi.socketPath, os.O_RDONLY|os.O_CREATE, 0666)
 
 		errChan := make(chan error, 1)
-		go func(errChan chan error) {
-			errChan <- dpi.healthCheck()
-		}(errChan)
+		healthCheckContext, err := dpi.setupHealthCheckContext()
+		Expect(err).ToNot(HaveOccurred())
+		go func() {
+			errChan <- dpi.healthCheck(healthCheckContext)
+		}()
 
 		By("waiting for initial healthchecks to send Healthy message for each device")
-		Consistently(func() string {
-			return dpi.devs[0].Health
-		}, 500*time.Millisecond, 100*time.Millisecond).Should(Equal(pluginapi.Healthy))
+		for range dpi.devs {
+			Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Healthy))))
+		}
 
 		Expect(os.Remove(dpi.socketPath)).To(Succeed())
 
 		Eventually(errChan, 5*time.Second).Should(Receive(Not(HaveOccurred())))
+	})
+
+	It("Should monitor health of device node", func() {
+		os.OpenFile(dpi.socketPath, os.O_RDONLY|os.O_CREATE, 0666)
+
+		By("Confirming that the device begins as unhealthy")
+		expectAllDevHealthIs(dpi.devs, pluginapi.Unhealthy)
+
+		By("waiting for initial healthchecks to send Healthy message")
+		healthCheckContext, err := dpi.setupHealthCheckContext()
+		Expect(err).ToNot(HaveOccurred())
+		go dpi.healthCheck(healthCheckContext)
+		for range dpi.devs {
+			Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Healthy))))
+		}
+
+		By("Removing (fake) device nodes")
+		usbDevicePath1 := filepath.Join(workDir, usbs[0].DevicePath)
+		usbDevicePath2 := filepath.Join(workDir, usbs[1].DevicePath)
+		Expect(os.Remove(usbDevicePath1)).To(Succeed())
+		Expect(os.Remove(usbDevicePath2)).To(Succeed())
+
+		By("waiting for healthcheck to send Unhealthy message")
+		Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Unhealthy))))
+
+		By("Creating a new (fake) device node 1")
+		createFile(usbDevicePath1)
+
+		By("waiting for healthcheck to send Unhealthy message")
+		// Since only one of the two devices in the group is healthy, the healthcheck should send Unhealthy
+		Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Unhealthy))))
+
+		By("Creating a new (fake) device node 2")
+		createFile(usbDevicePath2)
+
+		By("waiting for healthcheck to send Healthy message")
+		// Since both devices in the group are now healthy, the healthcheck should send Healthy
+		Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Healthy))))
 	})
 
 	DescribeTable("with USBHostDevice configuration", func(hostDeviceConfig []v1.USBHostDevice, result map[string][]*PluginDevices) {
@@ -131,7 +173,6 @@ var _ = Describe("USB Device", func() {
 		for resourceName, pluginDevices := range pdmap {
 			Expect(pluginDevices).To(HaveLen(len(result[resourceName])), "Number of k8s devices")
 			for i, dev := range pluginDevices {
-				Expect(dev.isHealthy).To(BeTrue())
 				Expect(dev.Devices).To(HaveLen(len(result[resourceName][i].Devices)), "Number of USB devices")
 				for j, usbdev := range dev.Devices {
 					expectMatch(usbdev, result[resourceName][i].Devices[j])
@@ -298,6 +339,58 @@ var _ = Describe("USB Device", func() {
 
 		devices := discoverPluggedUSBDevices()
 		Expect(devices.devices).To(BeEmpty())
+	})
+
+	It("Should setup watcher for USB devices", func() {
+		watcher, err := fsnotify.NewWatcher()
+		Expect(err).ToNot(HaveOccurred())
+		defer watcher.Close()
+
+		monitoredDevices := make(map[string]string)
+		err = dpi.setupMonitoredDevicesFunc(watcher, monitoredDevices)
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(monitoredDevices).To(HaveLen(3))
+		Expect(watcher.WatchList()).To(HaveLen(3))
+	})
+
+	It("Should return error if device directory does not exist", func() {
+		badDevices := []*PluginDevices{{ID: "bad", Devices: []*USBDevice{{DevicePath: "/missing/device"}}}}
+		badPlugin := NewUSBDevicePlugin(resourceName1, workDir, badDevices, nil)
+
+		watcher, _ := fsnotify.NewWatcher()
+		defer watcher.Close()
+
+		err := badPlugin.setupMonitoredDevicesFunc(watcher, make(map[string]string))
+		Expect(err).To(MatchError(ContainSubstring("failed to watch device")))
+	})
+
+	It("Should allocate the device", func() {
+		allocateRequest := &pluginapi.AllocateRequest{
+			ContainerRequests: []*pluginapi.ContainerAllocateRequest{
+				{
+					DevicesIDs: []string{dpi.devs[0].ID},
+				},
+			},
+		}
+
+		allocateResponse, err := dpi.Allocate(context.Background(), allocateRequest)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(allocateResponse.ContainerResponses).To(HaveLen(1))
+		// Devices[0] has 2 USB devices
+		Expect(allocateResponse.ContainerResponses[0].Devices).To(HaveLen(2))
+		Expect(allocateResponse.ContainerResponses[0].Devices[0].HostPath).To(Equal(usbs[0].DevicePath))
+		Expect(allocateResponse.ContainerResponses[0].Devices[0].ContainerPath).To(Equal(usbs[0].DevicePath))
+		Expect(allocateResponse.ContainerResponses[0].Devices[0].Permissions).To(Equal("mrw"))
+		Expect(allocateResponse.ContainerResponses[0].Devices[1].HostPath).To(Equal(usbs[1].DevicePath))
+
+		Expect(allocateResponse.ContainerResponses[0].Envs).To(HaveLen(1))
+		for key, val := range allocateResponse.ContainerResponses[0].Envs {
+			Expect(key).To(ContainSubstring("USB_RESOURCE_"))
+			// 3:11 and 4:7
+			Expect(val).To(ContainSubstring(fmt.Sprintf("%d:%d", usbs[0].Bus, usbs[0].DeviceNumber)))
+			Expect(val).To(ContainSubstring(fmt.Sprintf("%d:%d", usbs[1].Bus, usbs[1].DeviceNumber)))
+		}
 	})
 })
 
