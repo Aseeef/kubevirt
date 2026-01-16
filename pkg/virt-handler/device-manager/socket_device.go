@@ -24,7 +24,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -122,28 +121,6 @@ func NewSocketDevicePlugin(socketName, socketDir, socket string, maxDevices int,
 	dpi.GetIDDeviceName = dpi.GetIDDeviceNameFunc
 	dpi.AllocateDP = dpi.AllocateDPFunc
 	return dpi, nil
-}
-
-// Register registers the device plugin for the given resourceName with Kubelet.
-func (dpi *SocketDevicePlugin) register() error {
-	conn, err := gRPCConnect(pluginapi.KubeletSocket, connectionTimeout)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	client := pluginapi.NewRegistrationClient(conn)
-	reqt := &pluginapi.RegisterRequest{
-		Version:      pluginapi.Version,
-		Endpoint:     path.Base(dpi.socketPath),
-		ResourceName: dpi.resourceName,
-	}
-
-	_, err = client.Register(context.Background(), reqt)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func (dpi *SocketDevicePlugin) AllocateDPFunc(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {

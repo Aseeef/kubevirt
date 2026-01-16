@@ -23,9 +23,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"net"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -33,7 +31,6 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"google.golang.org/grpc"
 	"k8s.io/apimachinery/pkg/util/rand"
 	v1 "kubevirt.io/api/core/v1"
 	"kubevirt.io/client-go/log"
@@ -237,34 +234,6 @@ func (plugin *USBDevicePlugin) healthCheck() error {
 			}
 		}
 	}
-}
-
-func (plugin *USBDevicePlugin) register() error {
-	conn, err := grpc.Dial(pluginapi.KubeletSocket,
-		grpc.WithInsecure(),
-		grpc.WithBlock(),
-		grpc.WithTimeout(5*time.Second),
-		grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
-			return net.DialTimeout("unix", addr, timeout)
-		}),
-	)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	client := pluginapi.NewRegistrationClient(conn)
-	reqt := &pluginapi.RegisterRequest{
-		Version:      pluginapi.Version,
-		Endpoint:     path.Base(plugin.socketPath),
-		ResourceName: plugin.GetDeviceName(),
-	}
-
-	_, err = client.Register(context.Background(), reqt)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 // Interface to expose Devices: IDs, health and Topology
