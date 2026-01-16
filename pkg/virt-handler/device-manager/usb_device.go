@@ -68,8 +68,8 @@ func (dev *USBDevice) GetID() string {
 // The actual plugin
 type USBDevicePlugin struct {
 	*DevicePluginBase
-	update  chan struct{}
 	devices []*PluginDevices
+	p       PermissionManager
 	logger  *log.FilteredLogger
 }
 
@@ -186,11 +186,11 @@ func (plugin *USBDevicePlugin) healthCheck() error {
 	watchedDirs := make(map[string]struct{})
 	for _, pd := range plugin.devices {
 		for _, usb := range pd.Devices {
-			usbDevicePath := filepath.Join(util.HostRootMount, usb.DevicePath)
+			usbDevicePath := filepath.Join(plugin.deviceRoot, usb.DevicePath)
 			usbDeviceDirPath := filepath.Dir(usbDevicePath)
 			if _, exists := watchedDirs[usbDeviceDirPath]; !exists {
 				if err := watcher.Add(usbDeviceDirPath); err != nil {
-					return fmt.Errorf("failed to watch device %s parent directory: %s", usbDevicePath, err)
+					return fmt.Errorf("failed to watch device %s's directory: %s", usbDevicePath, err)
 				}
 				watchedDirs[usbDeviceDirPath] = struct{}{}
 			}
@@ -290,9 +290,9 @@ func (plugin *USBDevicePlugin) AllocateDPFunc(_ context.Context, allocRequest *p
 
 			deviceSpecs := []*pluginapi.DeviceSpec{}
 			for _, dev := range pluginDevices.Devices {
-				spath, err := safepath.JoinAndResolveWithRelativeRoot(util.HostRootMount, dev.DevicePath)
+				spath, err := safepath.JoinAndResolveWithRelativeRoot(plugin.deviceRoot, dev.DevicePath)
 				if err != nil {
-					return nil, fmt.Errorf("error opening the socket %s: %v", dev.DevicePath, err)
+					return nil, fmt.Errorf("error opening the device %s: %v", dev.DevicePath, err)
 				}
 
 				err = safepath.ChownAtNoFollow(spath, util.NonRootUID, util.NonRootUID)
@@ -521,7 +521,7 @@ func discoverAllowedUSBDevices(usbs []v1.USBHostDevice) map[string][]*PluginDevi
 	return plugins
 }
 
-func NewUSBDevicePlugin(resourceName string, pluginDevices []*PluginDevices) *USBDevicePlugin {
+func NewUSBDevicePlugin(resourceName string, deviceRoot string, pluginDevices []*PluginDevices, p PermissionManager) *USBDevicePlugin {
 	s := strings.Split(resourceName, "/")
 	resourceID := s[0]
 	if len(s) > 1 {
@@ -531,6 +531,8 @@ func NewUSBDevicePlugin(resourceName string, pluginDevices []*PluginDevices) *US
 	usb := &USBDevicePlugin{
 		DevicePluginBase: &DevicePluginBase{
 			socketPath:   SocketPath(resourceID),
+			deviceRoot:   deviceRoot,
+			devicePath:   pathToUSBDevices,
 			resourceName: resourceName,
 			initialized:  false,
 			lock:         &sync.Mutex{},
@@ -539,10 +541,12 @@ func NewUSBDevicePlugin(resourceName string, pluginDevices []*PluginDevices) *US
 			deregistered: make(chan struct{}),
 		},
 		devices: pluginDevices,
+		p:       p,
 		logger:  log.Log.With("subcomponent", resourceID),
 	}
 	usb.GetIDDeviceName = usb.GetIDDeviceNameFunc
 	usb.AllocateDP = usb.AllocateDPFunc
+	usb.devs = usb.devicesToKubeVirtDevicePlugin()
 	return usb
 }
 
