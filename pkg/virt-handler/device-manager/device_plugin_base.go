@@ -60,7 +60,7 @@ type DevicePluginBase struct {
 	initialized       bool
 	lock              *sync.Mutex
 	deregistered      chan struct{}
-	deviceRoot        string                                                                                 // Root directory where the device is located
+	deviceRoot        string                                                                                 // An absolute path marking a root directory for where this DP is (typically intended to be either "/" or util.HostRootMount)
 	devicePath        string                                                                                 // Relative path to the device from the device root
 	AllocateDP        func(context.Context, *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) // REQUIRED function to allocate the device.
 	SetupDevicePlugin func() error                                                                           // Optional function to perform additional setup steps that are not covered by the default implementation
