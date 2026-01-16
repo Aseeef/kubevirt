@@ -29,6 +29,7 @@ import (
 
 	k8sv1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
+
 	"kubevirt.io/kubevirt/pkg/util"
 
 	"kubevirt.io/client-go/log"
@@ -194,12 +195,8 @@ func (c *DeviceController) updatePermittedHostDevicePlugins() []Device {
 	}
 
 	if c.virtConfig.PersistentReservationEnabled() {
-		d, err := NewSocketDevicePlugin(reservation.GetPrResourceName(), reservation.GetPrHelperSocketDir(), reservation.GetPrHelperSocket(), c.maxDevices, selinux.SELinuxExecutor{}, NewPermissionManager(), false)
-		if err != nil {
-			log.Log.Reason(err).Errorf("failed to configure the desired mdev types, failed to get node details")
-		} else {
-			permittedDevices = append(permittedDevices, d)
-		}
+		d := NewSocketDevicePlugin(reservation.GetPrResourceName(), reservation.GetPrHelperSocketDir(), reservation.GetPrHelperSocket(), c.maxDevices, selinux.SELinuxExecutor{}, NewPermissionManager(), false)
+		permittedDevices = append(permittedDevices, d)
 	}
 
 	hostDevs := c.virtConfig.GetPermittedHostDevices()
