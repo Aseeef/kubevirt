@@ -916,6 +916,25 @@ func (KubeVirtConfiguration) SwaggerDoc() map[string]string {
 		"commonInstancetypesDeployment":      "CommonInstancetypesDeployment controls the deployment of common-instancetypes resources\n+nullable",
 		"instancetype":                       "Instancetype configuration\n+nullable",
 		"changedBlockTrackingLabelSelectors": "ChangedBlockTrackingLabelSelectors defines label selectors. VMs matching these selectors will have changed block tracking enabled.\nEnabling changedBlockTracking is mandatory for performing storage-agnostic backups and incremental backups.\n+nullable",
+		"confidentialCompute":                "QGS configuration for attestation on the Intel TDX Platform",
+	}
+}
+
+func (TDXAttestationConfiguration) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"":              "QGSConfiguration holds QGS configuration",
+		"enforced":      "Indicates whether TDX VM should enforce the existence of QGS (required for attestation) to be scheduled, defaults to false",
+		"qgsSocketPath": "QGS socket path, defaults to /var/run/tdx-qgs/qgs.socket",
+	}
+}
+
+func (TDXConfiguration) SwaggerDoc() map[string]string {
+	return map[string]string{}
+}
+
+func (ConfidentialComputeConfiguration) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"tdx": "TDX configuration for attestation on the Intel TDX Platform",
 	}
 }
 

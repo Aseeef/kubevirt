@@ -962,6 +962,27 @@ var CRDsValidation map[string]string = map[string]string{
                   nullable: true
                   type: boolean
               type: object
+            confidentialCompute:
+              description: QGS configuration for attestation on the Intel TDX Platform
+              properties:
+                tdx:
+                  description: TDX configuration for attestation on the Intel TDX
+                    Platform
+                  properties:
+                    attestation:
+                      description: QGSConfiguration holds QGS configuration
+                      properties:
+                        enforced:
+                          description: Indicates whether TDX VM should enforce the
+                            existence of QGS (required for attestation) to be scheduled,
+                            defaults to false
+                          type: boolean
+                        qgsSocketPath:
+                          description: QGS socket path, defaults to /var/run/tdx-qgs/qgs.socket
+                          type: string
+                      type: object
+                  type: object
+              type: object
             controllerConfiguration:
               description: |-
                 ReloadableComponentConfiguration holds all generic k8s configuration options which can

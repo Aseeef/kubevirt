@@ -3093,6 +3093,26 @@ type KubeVirtConfiguration struct {
 	// Enabling changedBlockTracking is mandatory for performing storage-agnostic backups and incremental backups.
 	// +nullable
 	ChangedBlockTrackingLabelSelectors *ChangedBlockTrackingSelectors `json:"changedBlockTrackingLabelSelectors,omitempty"`
+
+	// QGS configuration for attestation on the Intel TDX Platform
+	ConfidentialCompute *ConfidentialComputeConfiguration `json:"confidentialCompute,omitempty"`
+}
+
+// QGSConfiguration holds QGS configuration
+type TDXAttestationConfiguration struct {
+	// Indicates whether TDX VM should enforce the existence of QGS (required for attestation) to be scheduled, defaults to false
+	Enforced *bool `json:"enforced,omitempty"`
+	// QGS socket path, defaults to /var/run/tdx-qgs/qgs.socket
+	QgsSocketPath *string `json:"qgsSocketPath,omitempty"`
+}
+
+type TDXConfiguration struct {
+	Attestation *TDXAttestationConfiguration `json:"attestation,omitempty"`
+}
+
+type ConfidentialComputeConfiguration struct {
+	// TDX configuration for attestation on the Intel TDX Platform
+	TDX *TDXConfiguration `json:"tdx,omitempty"`
 }
 
 type ChangedBlockTrackingSelectors struct {
