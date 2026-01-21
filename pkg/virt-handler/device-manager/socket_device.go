@@ -84,6 +84,18 @@ func (dpi *SocketDevicePlugin) setSocketDirectoryPermissions() error {
 	return nil
 }
 
+// Optional Socket Device Plugins are always healthy. If socket device is available, we mount it, otherwise we carry on life without it.
+func NewOptionalSocketDevicePlugin(socketName, socketDir, socketFile string, maxDevices int, executor selinux.Executor, p PermissionManager, useHostRootMount bool) *SocketDevicePlugin {
+	dpi := NewSocketDevicePlugin(socketName, socketDir, socketFile, maxDevices, executor, p, useHostRootMount)
+	for _, dev := range dpi.devs {
+		dev.Health = pluginapi.Healthy
+	}
+	dpi.CustomReportHealth = func(deviceID string, absoluteDevicePath string, healthy bool) (bool, error) {
+		return true, nil
+	}
+	return dpi
+}
+
 func NewSocketDevicePlugin(socketName, socketDir, socketFile string, maxDevices int, executor selinux.Executor, p PermissionManager, useHostRootMount bool) *SocketDevicePlugin {
 	deviceRoot := "/"
 	if useHostRootMount {
