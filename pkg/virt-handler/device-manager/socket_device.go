@@ -153,9 +153,8 @@ func NewOptionalSocketDevicePlugin(socketName, socketDir, socket string, maxDevi
 			Health: pluginapi.Healthy,
 		})
 	}
-	dpi.setupMonitoredDevices = func(watcher *fsnotify.Watcher, monitoredDevices map[string]string) error {
-		// don't monitor anything
-		return nil
+	dpi.mutateHealthUpdate = func(_ string, _ string, _ bool) (bool, error) {
+		return true, nil
 	}
 	return dpi
 }
