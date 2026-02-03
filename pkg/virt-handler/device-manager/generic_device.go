@@ -25,7 +25,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync"
 
 	"github.com/fsnotify/fsnotify"
 	"kubevirt.io/client-go/log"
@@ -41,31 +40,23 @@ type GenericDevicePlugin struct {
 }
 
 func NewGenericDevicePlugin(deviceName string, devicePath string, maxDevices int, permissions string, preOpen bool) *GenericDevicePlugin {
-	serverSock := SocketPath(deviceName)
-	dpi := &GenericDevicePlugin{
-		DevicePluginBase: &DevicePluginBase{
-			devs:         []*pluginapi.Device{},
-			socketPath:   serverSock,
-			deviceRoot:   util.HostRootMount,
-			devicePath:   devicePath,
-			health:       make(chan deviceHealth, maxDevices),
-			done:         make(chan struct{}),
-			deregistered: make(chan struct{}),
-			resourceName: fmt.Sprintf("%s/%s", DeviceNamespace, deviceName),
-			initialized:  false,
-			lock:         &sync.Mutex{},
-		},
-		preOpen:     preOpen,
-		permissions: permissions,
-	}
-
+	devs := make([]*pluginapi.Device, 0, maxDevices)
 	for i := range maxDevices {
 		deviceId := deviceName + strconv.Itoa(i)
-		dpi.devs = append(dpi.devs, &pluginapi.Device{
+		devs = append(devs, &pluginapi.Device{
 			ID:     deviceId,
 			Health: pluginapi.Unhealthy,
 		})
 	}
+
+	resourceName := fmt.Sprintf("%s/%s", DeviceNamespace, deviceName)
+	socketPath := SocketPath(deviceName)
+	dpi := &GenericDevicePlugin{
+		DevicePluginBase: NewDevicePluginBase(resourceName, socketPath, util.HostRootMount, devicePath, devs),
+		preOpen:          preOpen,
+		permissions:      permissions,
+	}
+
 	dpi.deviceNameByID = dpi.deviceNameByIDFunc
 	dpi.setupMonitoredDevices = dpi.setupMonitoredDevicesFunc
 	dpi.setupDevicePlugin = dpi.setupDevicePluginFunc

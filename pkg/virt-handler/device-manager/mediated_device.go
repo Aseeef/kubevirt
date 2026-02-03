@@ -25,7 +25,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"context"
 
@@ -56,26 +55,15 @@ type MediatedDevicePlugin struct {
 func NewMediatedDevicePlugin(mdevs []*MDEV, resourceName string) *MediatedDevicePlugin {
 	s := strings.Split(resourceName, "/")
 	mdevTypeName := s[1]
-	serverSock := SocketPath(mdevTypeName)
+	socketPath := SocketPath(mdevTypeName)
 	iommuToMDEVMap := make(map[string]string)
-
 	devs := constructDPIdevicesFromMdev(mdevs, iommuToMDEVMap)
 
 	dpi := &MediatedDevicePlugin{
-		DevicePluginBase: &DevicePluginBase{
-			devs:         devs,
-			socketPath:   serverSock,
-			resourceName: resourceName,
-			devicePath:   vfioDevicePath,
-			deviceRoot:   util.HostRootMount,
-			initialized:  false,
-			lock:         &sync.Mutex{},
-			health:       make(chan deviceHealth, len(devs)),
-			done:         make(chan struct{}),
-			deregistered: make(chan struct{}),
-		},
-		iommuToMDEVMap: iommuToMDEVMap,
+		DevicePluginBase: NewDevicePluginBase(resourceName, socketPath, util.HostRootMount, vfioDevicePath, devs),
+		iommuToMDEVMap:   iommuToMDEVMap,
 	}
+
 	dpi.setupMonitoredDevices = dpi.setupMonitoredDevicesFunc
 	dpi.deviceNameByID = dpi.deviceNameByIDFunc
 	dpi.allocateDP = dpi.allocateDPFunc

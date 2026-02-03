@@ -27,7 +27,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/fsnotify/fsnotify"
 	"k8s.io/apimachinery/pkg/util/rand"
@@ -406,24 +405,16 @@ func NewUSBDevicePlugin(resourceName string, deviceRoot string, pluginDevices []
 		resourceID = s[1]
 	}
 	resourceID = fmt.Sprintf("usb-%s", resourceID)
+
 	devs := devicesToKubeVirtDevicePlugin(pluginDevices)
+	socketPath := SocketPath(resourceID)
 	usb := &USBDevicePlugin{
-		DevicePluginBase: &DevicePluginBase{
-			devs:         devs,
-			socketPath:   SocketPath(resourceID),
-			deviceRoot:   deviceRoot,
-			devicePath:   pathToUSBDevices,
-			resourceName: resourceName,
-			initialized:  false,
-			lock:         &sync.Mutex{},
-			health:       make(chan deviceHealth, len(devs)),
-			done:         make(chan struct{}),
-			deregistered: make(chan struct{}),
-		},
-		devices: pluginDevices,
-		p:       p,
-		logger:  log.Log.With("subcomponent", resourceID),
+		DevicePluginBase: NewDevicePluginBase(resourceName, socketPath, deviceRoot, pathToUSBDevices, devs),
+		devices:          pluginDevices,
+		p:                p,
+		logger:           log.Log.With("subcomponent", resourceID),
 	}
+
 	usb.setupMonitoredDevices = usb.setupMonitoredDevicesFunc
 	usb.deviceNameByID = usb.deviceNameByIDFunc
 	// If permission manager is not provided, we assume that device doesn't need any permissions configured.

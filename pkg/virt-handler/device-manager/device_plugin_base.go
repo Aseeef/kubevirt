@@ -76,6 +76,21 @@ type healthCheckContext struct {
 	watcher *fsnotify.Watcher
 }
 
+func NewDevicePluginBase(resourceName, socketPath, deviceRoot, devicePath string, devs []*pluginapi.Device) *DevicePluginBase {
+	return &DevicePluginBase{
+		devs:         devs,
+		socketPath:   socketPath,
+		deviceRoot:   deviceRoot,
+		devicePath:   devicePath,
+		resourceName: resourceName,
+		initialized:  false,
+		lock:         &sync.Mutex{},
+		health:       make(chan deviceHealth, len(devs)),
+		done:         make(chan struct{}),
+		deregistered: make(chan struct{}),
+	}
+}
+
 func (dpi *DevicePluginBase) GetResourceName() string {
 	return dpi.resourceName
 }

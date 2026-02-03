@@ -26,7 +26,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/fsnotify/fsnotify"
 	"kubevirt.io/client-go/log"
@@ -89,21 +88,23 @@ func NewSocketDevicePlugin(socketName, socketDir, socketFile string, maxDevices 
 	if useHostRootMount {
 		deviceRoot = util.HostRootMount
 	}
+
+	devs := make([]*pluginapi.Device, 0, maxDevices)
+	for i := range maxDevices {
+		deviceId := socketName + strconv.Itoa(i)
+		devs = append(devs, &pluginapi.Device{
+			ID:     deviceId,
+			Health: pluginapi.Unhealthy,
+		})
+	}
+
+	resourceName := fmt.Sprintf("%s/%s", DeviceNamespace, socketName)
+	socketPath := SocketPath(strings.Replace(socketName, "/", "-", -1))
+	devicePath := path.Join(socketDir, socketFile)
 	dpi := &SocketDevicePlugin{
-		DevicePluginBase: &DevicePluginBase{
-			devs:         []*pluginapi.Device{},
-			health:       make(chan deviceHealth, maxDevices),
-			resourceName: fmt.Sprintf("%s/%s", DeviceNamespace, socketName),
-			initialized:  false,
-			lock:         &sync.Mutex{},
-			done:         make(chan struct{}),
-			deregistered: make(chan struct{}),
-			socketPath:   SocketPath(strings.Replace(socketName, "/", "-", -1)),
-			deviceRoot:   deviceRoot,
-			devicePath:   path.Join(socketDir, socketFile),
-		},
-		p:        p,
-		executor: executor,
+		DevicePluginBase: NewDevicePluginBase(resourceName, socketPath, deviceRoot, devicePath, devs),
+		p:                p,
+		executor:         executor,
 	}
 
 	dpi.deviceNameByID = dpi.deviceNameByIDFunc
@@ -120,14 +121,6 @@ func NewSocketDevicePlugin(socketName, socketDir, socketFile string, maxDevices 
 			// Then set socket permissions
 			return dpi.setSocketPermissions()
 		}
-	}
-
-	for i := range maxDevices {
-		deviceId := socketName + strconv.Itoa(i)
-		dpi.devs = append(dpi.devs, &pluginapi.Device{
-			ID:     deviceId,
-			Health: pluginapi.Unhealthy,
-		})
 	}
 
 	return dpi
