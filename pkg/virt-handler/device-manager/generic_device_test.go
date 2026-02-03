@@ -20,6 +20,7 @@
 package device_manager
 
 import (
+	"context"
 	"os"
 	"path"
 	"path/filepath"
@@ -33,17 +34,17 @@ import (
 )
 
 var _ = Describe("Generic Device", func() {
-	var dpi *GenericDevicePlugin
-	var devicePath string
+	var (
+		workDir    string
+		dpi        *GenericDevicePlugin
+		devicePath string
+	)
 
 	BeforeEach(func() {
-		workDir, err := os.MkdirTemp("", "kubevirt-test")
-		Expect(err).ToNot(HaveOccurred())
+		workDir = GinkgoT().TempDir()
 
 		devicePath = path.Join(workDir, "foo")
-		fileObj, err := os.Create(devicePath)
-		Expect(err).ToNot(HaveOccurred())
-		fileObj.Close()
+		createFile(devicePath)
 
 		dpi = NewGenericDevicePlugin("foo", devicePath, 1, "rw", true)
 		dpi.socketPath = filepath.Join(workDir, "test.sock")
@@ -71,7 +72,7 @@ var _ = Describe("Generic Device", func() {
 		}, 500*time.Millisecond, 100*time.Millisecond).Should(Equal(pluginapi.Healthy))
 		Expect(os.Remove(dpi.socketPath)).To(Succeed())
 
-		Expect(<-errChan).ToNot(HaveOccurred())
+		Eventually(errChan, 5*time.Second).Should(Receive(Not(HaveOccurred())))
 	})
 
 	It("Should monitor health of device node", func() {
@@ -87,18 +88,30 @@ var _ = Describe("Generic Device", func() {
 		os.Remove(devicePath)
 
 		By("waiting for healthcheck to send Unhealthy message")
-		Eventually(func() string {
-			return (<-dpi.health).Health
-		}, 5*time.Second).Should(Equal(pluginapi.Unhealthy))
+		Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Unhealthy))))
 
 		By("Creating a new (fake) device node")
-		fileObj, err := os.Create(devicePath)
-		Expect(err).ToNot(HaveOccurred())
-		fileObj.Close()
+		createFile(devicePath)
 
 		By("waiting for healthcheck to send Healthy message")
-		Eventually(func() string {
-			return (<-dpi.health).Health
-		}, 5*time.Second).Should(Equal(pluginapi.Healthy))
+		Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Healthy))))
+	})
+
+	It("Should allocate the device", func() {
+		allocateRequest := &pluginapi.AllocateRequest{
+			ContainerRequests: []*pluginapi.ContainerAllocateRequest{
+				{
+					DevicesIDs: []string{dpi.devs[0].ID},
+				},
+			},
+		}
+
+		allocateResponse, err := dpi.Allocate(context.Background(), allocateRequest)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(allocateResponse.ContainerResponses).To(HaveLen(1))
+		Expect(allocateResponse.ContainerResponses[0].Devices).To(HaveLen(1))
+		Expect(allocateResponse.ContainerResponses[0].Devices[0].HostPath).To(Equal(devicePath))
+		Expect(allocateResponse.ContainerResponses[0].Devices[0].ContainerPath).To(Equal(devicePath))
+		Expect(allocateResponse.ContainerResponses[0].Devices[0].Permissions).To(Equal("rw"))
 	})
 })

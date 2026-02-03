@@ -20,6 +20,7 @@
 package device_manager
 
 import (
+	"context"
 	"os"
 	"path"
 	"path/filepath"
@@ -35,14 +36,16 @@ import (
 )
 
 var _ = Describe("Socket device", func() {
-	var dpi *SocketDevicePlugin
-	var sockDevPath string
+	var (
+		workDir     string
+		dpi         *SocketDevicePlugin
+		sockDevPath string
+	)
 	const socket = "fake-test.sock"
 
 	BeforeEach(func() {
 		var err error
-		workDir := GinkgoT().TempDir()
-		Expect(err).ToNot(HaveOccurred())
+		workDir = GinkgoT().TempDir()
 		sockDevPath = path.Join(workDir, socket)
 		createFile(sockDevPath)
 
@@ -72,7 +75,7 @@ var _ = Describe("Socket device", func() {
 		}, 500*time.Millisecond, 100*time.Millisecond).Should(Equal(pluginapi.Healthy))
 		Expect(os.Remove(dpi.socketPath)).To(Succeed())
 
-		Expect(<-errChan).ToNot(HaveOccurred())
+		Eventually(errChan, 5*time.Second).Should(Receive(Not(HaveOccurred())))
 	})
 
 	It("Should monitor health of device node", func() {
@@ -83,22 +86,43 @@ var _ = Describe("Socket device", func() {
 		os.Remove(sockDevPath)
 
 		By("waiting for healthcheck to send Unhealthy message")
-		Eventually(func() string {
-			return (<-dpi.health).Health
-		}, 5*time.Second).Should(Equal(pluginapi.Unhealthy))
+		Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Unhealthy))))
 
 		By("Creating a new (fake) device node")
 		createFile(sockDevPath)
 
 		By("waiting for healthcheck to send Healthy message")
-		Eventually(func() string {
-			return (<-dpi.health).Health
-		}, 5*time.Second).Should(Equal(pluginapi.Healthy))
+		Eventually(dpi.health, 5*time.Second).Should(Receive(HaveField("Health", Equal(pluginapi.Healthy))))
+	})
+
+	It("Should allocate the device", func() {
+		allocateRequest := &pluginapi.AllocateRequest{
+			ContainerRequests: []*pluginapi.ContainerAllocateRequest{
+				{
+					DevicesIDs: []string{dpi.devs[0].ID},
+				},
+			},
+		}
+
+		allocateResponse, err := dpi.Allocate(context.Background(), allocateRequest)
+		socketDir := filepath.Dir(dpi.devicePath)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(allocateResponse.ContainerResponses).To(HaveLen(1))
+		Expect(allocateResponse.ContainerResponses[0].Mounts).To(HaveLen(1))
+		Expect(allocateResponse.ContainerResponses[0].Mounts[0].HostPath).To(Equal(socketDir))
+		Expect(allocateResponse.ContainerResponses[0].Mounts[0].ContainerPath).To(Equal(socketDir))
+		Expect(allocateResponse.ContainerResponses[0].Mounts[0].ReadOnly).To(BeFalse())
 	})
 })
 
 func createFile(path string) {
+	// create parent director(y,ies) if it doesn't exist
+	dir := filepath.Dir(path)
+	err := os.MkdirAll(dir, 0755)
+	Expect(err).ToNot(HaveOccurred())
+	// create file
 	fileObj, err := os.Create(path)
 	Expect(err).ToNot(HaveOccurred())
-	fileObj.Close()
+	err = fileObj.Close()
+	Expect(err).ToNot(HaveOccurred())
 }

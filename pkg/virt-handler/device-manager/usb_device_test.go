@@ -21,11 +21,17 @@ package device_manager
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/grpc"
 
 	v1 "kubevirt.io/api/core/v1"
+
+	pluginapi "kubevirt.io/kubevirt/pkg/virt-handler/device-manager/deviceplugin/v1beta1"
 )
 
 var _ = Describe("USB Device", func() {
@@ -68,6 +74,54 @@ var _ = Describe("USB Device", func() {
 
 	const resourceName1 = "testing.usb/usecase"
 	const resourceName2 = "testing.usb/another"
+
+	var (
+		dpi     *USBDevicePlugin
+		stop    chan struct{}
+		workDir string
+	)
+
+	BeforeEach(func() {
+		workDir = GinkgoT().TempDir()
+		devices := []*PluginDevices{
+			newPluginDevices(resourceName1, 0, []*USBDevice{usbs[0], usbs[1]}),
+			newPluginDevices(resourceName2, 1, []*USBDevice{usbs[2]}),
+		}
+		// create dummy devices in the workDir
+		for _, device := range devices {
+			for _, usb := range device.Devices {
+				createFile(filepath.Join(workDir, usb.DevicePath))
+			}
+		}
+		dpi = NewUSBDevicePlugin(resourceName1, workDir, devices, newPermissionManager())
+		dpi.server = grpc.NewServer([]grpc.ServerOption{}...)
+		dpi.socketPath = filepath.Join(workDir, "kubevirt-test.sock")
+		createFile(dpi.socketPath)
+		stop = make(chan struct{})
+		dpi.stop = stop
+	})
+
+	AfterEach(func() {
+		close(stop)
+	})
+
+	It("Should stop if the device plugin socket file is deleted", func() {
+		os.OpenFile(dpi.socketPath, os.O_RDONLY|os.O_CREATE, 0666)
+
+		errChan := make(chan error, 1)
+		go func(errChan chan error) {
+			errChan <- dpi.healthCheck()
+		}(errChan)
+
+		By("waiting for initial healthchecks to send Healthy message for each device")
+		Consistently(func() string {
+			return dpi.devs[0].Health
+		}, 500*time.Millisecond, 100*time.Millisecond).Should(Equal(pluginapi.Healthy))
+
+		Expect(os.Remove(dpi.socketPath)).To(Succeed())
+
+		Eventually(errChan, 5*time.Second).Should(Receive(Not(HaveOccurred())))
+	})
 
 	DescribeTable("with USBHostDevice configuration", func(hostDeviceConfig []v1.USBHostDevice, result map[string][]*PluginDevices) {
 		discoverLocalUSBDevicesFunc = findAll

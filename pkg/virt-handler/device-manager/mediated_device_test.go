@@ -21,13 +21,17 @@ package device_manager
 
 import (
 	"bufio"
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 
 	k8sv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,6 +43,7 @@ import (
 
 	"kubevirt.io/kubevirt/pkg/testutils"
 	"kubevirt.io/kubevirt/pkg/virt-config/featuregate"
+	pluginapi "kubevirt.io/kubevirt/pkg/virt-handler/device-manager/deviceplugin/v1beta1"
 )
 
 const (
@@ -50,12 +55,14 @@ const (
 )
 
 var _ = Describe("Mediated Device", func() {
-	var mockPCI *MockDeviceHandler
-	var fakePermittedHostDevicesConfig string
-	var fakePermittedHostDevices v1.PermittedHostDevices
-	var ctrl *gomock.Controller
-	var fakeSupportedTypesPath string
-	var fakeNodeStore cache.Store
+	var (
+		mockPCI                        *MockDeviceHandler
+		fakePermittedHostDevicesConfig string
+		fakePermittedHostDevices       v1.PermittedHostDevices
+		ctrl                           *gomock.Controller
+		fakeSupportedTypesPath         string
+		fakeNodeStore                  cache.Store
+	)
 	resourceNameToTypeName := func(rawName string) string {
 		typeNameStr := strings.Replace(rawName, " ", "_", -1)
 		typeNameStr = strings.TrimSpace(typeNameStr)
@@ -250,5 +257,104 @@ var _ = Describe("Mediated Device", func() {
 			Expect(disabledDevicePlugins).To(HaveLen(1), "the fake device plugin did not get disabled")
 			Ω(disabledDevicePlugins).Should(HaveKey(fakeMdevResourceName))
 		})
+	})
+})
+
+var _ = Describe("Mediated Device Health check validation", func() {
+	var (
+		workDir       string
+		dpi           *MediatedDevicePlugin
+		stop          chan struct{}
+		vfioDeviceDir string
+	)
+
+	BeforeEach(func() {
+		workDir = GinkgoT().TempDir()
+
+		// Create fake vfio device directory structure
+		vfioDeviceDir = filepath.Join(workDir, "dev", "vfio")
+		err := os.MkdirAll(vfioDeviceDir, 0755)
+		Expect(err).ToNot(HaveOccurred())
+
+		// Create fake vfio device file
+		vfioDevice := filepath.Join(vfioDeviceDir, fakeIommuGroup)
+		createFile(vfioDevice)
+
+		// Create mediated device plugin
+		mdevs := []*MDEV{
+			{
+				UUID:             fakeMdevUUID,
+				typeName:         removeSelectorSpaces(fakeMdevNameSelector),
+				parentPciAddress: fakeAddress,
+				iommuGroup:       fakeIommuGroup,
+				numaNode:         fakeNumaNode,
+			},
+		}
+		dpi = NewMediatedDevicePlugin(mdevs, fakeMdevResourceName)
+		dpi.socketPath = filepath.Join(workDir, "test.sock")
+		dpi.server = grpc.NewServer([]grpc.ServerOption{}...)
+		dpi.deviceRoot = workDir
+		dpi.devicePath = "/dev/vfio"
+		stop = make(chan struct{})
+		dpi.stop = stop
+	})
+
+	AfterEach(func() {
+		close(stop)
+	})
+
+	It("Should stop if the device plugin socket file is deleted", func() {
+		os.OpenFile(dpi.socketPath, os.O_RDONLY|os.O_CREATE, 0666)
+
+		errChan := make(chan error, 1)
+		go func(errChan chan error) {
+			errChan <- dpi.healthCheck()
+		}(errChan)
+		Consistently(func() string {
+			return dpi.devs[0].Health
+		}, 500*time.Millisecond, 100*time.Millisecond).Should(Equal(pluginapi.Healthy))
+		Expect(os.Remove(dpi.socketPath)).To(Succeed())
+
+		Eventually(errChan, 5*time.Second).Should(Receive(Not(HaveOccurred())))
+	})
+
+	It("Should allocate the device", func() {
+		allocateRequest := &pluginapi.AllocateRequest{
+			ContainerRequests: []*pluginapi.ContainerAllocateRequest{
+				{
+					DevicesIDs: []string{fakeIommuGroup},
+				},
+			},
+		}
+
+		allocateResponse, err := dpi.Allocate(context.Background(), allocateRequest)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(allocateResponse.ContainerResponses).To(HaveLen(1))
+		// formatVFIODeviceSpecs adds 2 devices
+		Expect(allocateResponse.ContainerResponses[0].Devices).To(HaveLen(2))
+		Expect(allocateResponse.ContainerResponses[0].Devices[0].HostPath).To(Equal(vfioMount))
+		// For mediated devices, formatVFIODeviceSpecs uses vfioDevicePath const "/dev/vfio/"
+		Expect(allocateResponse.ContainerResponses[0].Devices[1].HostPath).To(Equal(filepath.Join(vfioDevicePath, fakeIommuGroup)))
+		Expect(allocateResponse.ContainerResponses[0].Envs).To(HaveLen(1))
+		for key, val := range allocateResponse.ContainerResponses[0].Envs {
+			Expect(key).To(ContainSubstring("MDEV_PCI_RESOURCE_"))
+			Expect(val).To(Equal(fakeMdevUUID))
+		}
+	})
+
+	It("Should fail to allocate the device if the device node is missing", func() {
+		vfioDevicePath := filepath.Join(vfioDeviceDir, fakeIommuGroup)
+		Expect(os.Remove(vfioDevicePath)).To(Succeed())
+
+		allocateRequest := &pluginapi.AllocateRequest{
+			ContainerRequests: []*pluginapi.ContainerAllocateRequest{
+				{
+					DevicesIDs: []string{fakeIommuGroup},
+				},
+			},
+		}
+
+		_, err := dpi.Allocate(context.Background(), allocateRequest)
+		Expect(err).To(MatchError(ContainSubstring(fmt.Sprintf("failed to allocate resource for resourceName: %s", fakeMdevResourceName))))
 	})
 })
