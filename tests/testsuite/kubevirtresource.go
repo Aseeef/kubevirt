@@ -146,9 +146,15 @@ func AdjustKubeVirtResource() {
 	Expect(err).ToNot(HaveOccurred())
 	KubeVirtDefaultConfig = adjustedKV.Spec.Configuration
 	if checks.HasFeature(featuregate.CPUManager) {
-		// CPUManager is not enabled in the control-plane node(s)
+		// CPUManager is typically not enabled in the control-plane node(s)
 		nodes, err := virtClient.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{LabelSelector: "!node-role.kubernetes.io/control-plane"})
 		Expect(err).NotTo(HaveOccurred())
+		// This case could happen in the case of single node clusters (like OpenShift SNO)
+		if len(nodes.Items) == 0 {
+			nodes, err = virtClient.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/worker"})
+			Expect(err).NotTo(HaveOccurred())
+		}
+		Expect(nodes.Items).ToNot(BeEmpty())
 		waitForSchedulableNodesWithCPUManager(len(nodes.Items))
 	}
 }
