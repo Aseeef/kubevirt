@@ -294,7 +294,17 @@ var _ = Describe("VirtualMachineInstance migration target", func() {
 				AllowWorkloadDisruption:  true,
 				AllowAutoConverge:        false,
 				StallDetectionEnabled:    false,
-				ParallelMigrationThreads: pointer.P(parallelMultifdMigrationThreads),
+				ParallelMigrationThreads: pointer.P(uint(virtconfig.DefaultParallelMigrationThreads)),
+				StallDetectorOptions: cmdclient.StallDetectorOptions{
+					StallMargin:               virtconfig.DefaultStallMargin,
+					StallProgressTimeout:      virtconfig.DefaultStallProgressTimeout,
+					SwitchoverTimeout:         virtconfig.DefaultSwitchoverTimeout,
+					EwmaAlpha:                 virtconfig.DefaultEwmaAlpha,
+					PrecopyPossibleFactor:     virtconfig.DefaultPrecopyPossibleFactor,
+					PatienceWindowDecayFactor: virtconfig.DefaultPatienceWindowDecayFactor,
+					SearchLocalMinima:         virtconfig.DefaultSearchLocalMinima,
+					CompletionTimeoutFactor:   virtconfig.DefaultCompletionTimeoutFactor,
+				},
 			}
 			client.EXPECT().MigrateVirtualMachine(vmi, expectedOptions)
 			sanityExecute()
@@ -550,7 +560,7 @@ var _ = Describe("VirtualMachineInstance migration target", func() {
 				client.EXPECT().MigrateVirtualMachine(gomock.Any(), gomock.Any()).Do(func(_ *v1.VirtualMachineInstance, options *cmdclient.MigrationOptions) {
 					Expect(options).ToNot(BeNil())
 					Expect(options.ParallelMigrationThreads).ToNot(BeNil())
-					Expect(*options.ParallelMigrationThreads).To(Equal(parallelMultifdMigrationThreads))
+					Expect(*options.ParallelMigrationThreads).To(Equal(uint(virtconfig.DefaultParallelMigrationThreads)))
 				}).Times(1).Return(nil)
 
 				controller.Execute()
@@ -661,7 +671,17 @@ var _ = Describe("VirtualMachineInstance migration target", func() {
 			MaxDowntimeMs:            virtconfig.DefaultMigrationMaxDowntimeMs,
 			UnsafeMigration:          virtconfig.DefaultUnsafeMigrationOverride,
 			AllowPostCopy:            virtconfig.MigrationAllowPostCopy,
-			ParallelMigrationThreads: pointer.P(parallelMultifdMigrationThreads),
+			ParallelMigrationThreads: pointer.P(uint(virtconfig.DefaultParallelMigrationThreads)),
+			StallDetectorOptions: cmdclient.StallDetectorOptions{
+				StallMargin:               virtconfig.DefaultStallMargin,
+				StallProgressTimeout:      virtconfig.DefaultStallProgressTimeout,
+				SwitchoverTimeout:         virtconfig.DefaultSwitchoverTimeout,
+				EwmaAlpha:                 virtconfig.DefaultEwmaAlpha,
+				PrecopyPossibleFactor:     virtconfig.DefaultPrecopyPossibleFactor,
+				PatienceWindowDecayFactor: virtconfig.DefaultPatienceWindowDecayFactor,
+				SearchLocalMinima:         virtconfig.DefaultSearchLocalMinima,
+				CompletionTimeoutFactor:   virtconfig.DefaultCompletionTimeoutFactor,
+			},
 		}
 		client.EXPECT().MigrateVirtualMachine(vmi, options)
 		sanityExecute()
