@@ -4129,16 +4129,16 @@ var CRDsValidation map[string]string = map[string]string{
         completionTimeoutPerGiB:
           format: int64
           type: integer
-        maxDowntimeMs:
-          format: int64
-          maximum: 2000000
-          minimum: 1
-          type: integer
         experimental:
           description: |-
             ExperimentalMigrationOptions is an alpha API. It is intended for experimental
             purposes only and will be removed in the future.
           type: object
+        maxDowntimeMs:
+          format: int64
+          maximum: 2000000
+          minimum: 1
+          type: integer
         selectors:
           properties:
             namespaceSelector:

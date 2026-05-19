@@ -18140,6 +18140,11 @@
       "description": "By default, the SELinux level of target virt-launcher pods is forced to the level of the source virt-launcher. When set to true, MatchSELinuxLevelOnMigration lets the CRI auto-assign a random level to the target. That will ensure the target virt-launcher doesn't share categories with another pod on the node. However, migrations will fail when using RWX volumes that don't automatically deal with SELinux levels.",
       "type": "boolean"
      },
+     "maxDowntimeMs": {
+      "description": "MaxDowntimeMs specifies the maximum tolerable downtime (in milliseconds) during switchover. Defaults to 900",
+      "type": "integer",
+      "format": "int64"
+     },
      "network": {
       "description": "Network is the name of the CNI network to use for live migrations. By default, migrations go through the pod network.",
       "type": "string"
@@ -20659,13 +20664,13 @@
       "type": "integer",
       "format": "int64"
      },
-     "maxDowntimeMs": {
-      "type": "integer",
-      "format": "int64"
-     },
      "experimental": {
       "description": "ExperimentalMigrationOptions is an alpha API. It is intended for experimental purposes only and will be removed in the future.",
       "$ref": "#/definitions/v1.ExperimentalMigrationOptions"
+     },
+     "maxDowntimeMs": {
+      "type": "integer",
+      "format": "int64"
      },
      "selectors": {
       "$ref": "#/definitions/v1alpha1.Selectors"
