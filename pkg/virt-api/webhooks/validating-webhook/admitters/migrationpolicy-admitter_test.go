@@ -22,6 +22,7 @@ package admitters
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -133,6 +134,13 @@ var _ = Describe("Validating MigrationPolicy Admitter", func() {
 				},
 			},
 		),
+
+		Entry("allowPostCopy true and allowWorkloadDisruption false",
+			migrationsv1.MigrationPolicySpec{
+				AllowPostCopy:           pointer.P(true),
+				AllowWorkloadDisruption: pointer.P(false),
+			},
+		),
 	)
 
 	DescribeTable("should accept migration policy with", func(policySpec migrationsv1.MigrationPolicySpec) {
@@ -150,7 +158,6 @@ var _ = Describe("Validating MigrationPolicy Admitter", func() {
 		Entry("greater than zero CompletionTimeoutPerGiB",
 			migrationsv1.MigrationPolicySpec{CompletionTimeoutPerGiB: pointer.P(int64(1))},
 		),
-
 		Entry("zero CompletionTimeoutPerGiB",
 			migrationsv1.MigrationPolicySpec{CompletionTimeoutPerGiB: pointer.P(int64(0))},
 		),
@@ -182,6 +189,47 @@ var _ = Describe("Validating MigrationPolicy Admitter", func() {
 				ExperimentalMigrationOptions: &v1.ExperimentalMigrationOptions{
 					StallDetector: &v1.StallDetectorOptions{
 						PrecopyPossibleFactor: pointer.P("2"),
+					},
+				},
+			},
+		),
+
+		Entry("allowPostCopy true and allowWorkloadDisruption true",
+			migrationsv1.MigrationPolicySpec{
+				AllowPostCopy:           pointer.P(true),
+				AllowWorkloadDisruption: pointer.P(true),
+			},
+		),
+
+		Entry("allowPostCopy false and allowWorkloadDisruption true",
+			migrationsv1.MigrationPolicySpec{
+				AllowPostCopy:           pointer.P(false),
+				AllowWorkloadDisruption: pointer.P(true),
+			},
+		),
+
+		Entry("allowPostCopy false and allowWorkloadDisruption false",
+			migrationsv1.MigrationPolicySpec{
+				AllowPostCopy:           pointer.P(false),
+				AllowWorkloadDisruption: pointer.P(false),
+			},
+		),
+
+		Entry("allowPostCopy true and allowWorkloadDisruption nil",
+			migrationsv1.MigrationPolicySpec{
+				AllowPostCopy: pointer.P(true),
+			},
+		),
+
+		Entry("valid experimental options",
+			migrationsv1.MigrationPolicySpec{
+				ExperimentalMigrationOptions: &v1.ExperimentalMigrationOptions{
+					StallDetector: &v1.StallDetectorOptions{
+						StallMargin:               pointer.P(int64(4)),
+						EwmaAlpha:                 pointer.P("0.4"),
+						PatienceWindowDecayFactor: pointer.P("0.5"),
+						PrecopyPossibleFactor:     pointer.P("1.5"),
+						CompletionTimeoutFactor:   pointer.P("2"),
 					},
 				},
 			},
@@ -248,6 +296,14 @@ var _ = Describe("Validating MigrationPolicy Admitter", func() {
 		),
 	)
 
+	It("policySpecToOptions maps every MigrationPolicySpec field", func() {
+		src := testutils.WithAllFieldsSet(reflect.TypeOf(migrationsv1.MigrationPolicySpec{})).(*migrationsv1.MigrationPolicySpec)
+		oracle := testutils.CopyByJSONTag(src, reflect.TypeOf(v1.VMIMConfigurationOptions{})).(*v1.VMIMConfigurationOptions)
+
+		got := policySpecToOptions(src)
+
+		Expect(*got).To(BeComparableTo(*oracle))
+	})
 })
 
 func createPolicyAdmissionReview(policy *migrationsv1.MigrationPolicy, namespace string) *admissionv1.AdmissionReview {
