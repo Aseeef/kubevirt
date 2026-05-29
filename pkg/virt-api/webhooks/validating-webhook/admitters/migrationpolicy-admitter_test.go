@@ -22,6 +22,7 @@ package admitters
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -103,6 +104,13 @@ var _ = Describe("Validating MigrationPolicy Admitter", func() {
 		Entry("negative CompletionTimeoutPerGiB",
 			migrationsv1.MigrationPolicySpec{CompletionTimeoutPerGiB: pointer.P(int64(-1))},
 		),
+
+		Entry("allowPostCopy true and allowWorkloadDisruption false",
+			migrationsv1.MigrationPolicySpec{
+				AllowPostCopy:           pointer.P(true),
+				AllowWorkloadDisruption: pointer.P(false),
+			},
+		),
 	)
 
 	DescribeTable("should accept migration policy with", func(policySpec migrationsv1.MigrationPolicySpec) {
@@ -120,7 +128,6 @@ var _ = Describe("Validating MigrationPolicy Admitter", func() {
 		Entry("greater than zero CompletionTimeoutPerGiB",
 			migrationsv1.MigrationPolicySpec{CompletionTimeoutPerGiB: pointer.P(int64(1))},
 		),
-
 		Entry("zero CompletionTimeoutPerGiB",
 			migrationsv1.MigrationPolicySpec{CompletionTimeoutPerGiB: pointer.P(int64(0))},
 		),
@@ -135,6 +142,47 @@ var _ = Describe("Validating MigrationPolicy Admitter", func() {
 
 		Entry("empty spec",
 			migrationsv1.MigrationPolicySpec{},
+		),
+
+		Entry("allowPostCopy true and allowWorkloadDisruption true",
+			migrationsv1.MigrationPolicySpec{
+				AllowPostCopy:           pointer.P(true),
+				AllowWorkloadDisruption: pointer.P(true),
+			},
+		),
+
+		Entry("allowPostCopy false and allowWorkloadDisruption true",
+			migrationsv1.MigrationPolicySpec{
+				AllowPostCopy:           pointer.P(false),
+				AllowWorkloadDisruption: pointer.P(true),
+			},
+		),
+
+		Entry("allowPostCopy false and allowWorkloadDisruption false",
+			migrationsv1.MigrationPolicySpec{
+				AllowPostCopy:           pointer.P(false),
+				AllowWorkloadDisruption: pointer.P(false),
+			},
+		),
+
+		Entry("allowPostCopy true and allowWorkloadDisruption nil",
+			migrationsv1.MigrationPolicySpec{
+				AllowPostCopy: pointer.P(true),
+			},
+		),
+
+		Entry("valid experimental options",
+			migrationsv1.MigrationPolicySpec{
+				ExperimentalMigrationOptions: &v1.ExperimentalMigrationOptions{
+					StallDetector: &v1.StallDetectorOptions{
+						StallMargin:               pointer.P(float64(0.04)),
+						EwmaAlpha:                 pointer.P(float64(0.4)),
+						PatienceWindowDecayFactor: pointer.P(float64(0.5)),
+						PrecopyPossibleFactor:     pointer.P(float64(1.5)),
+						CompletionTimeoutFactor:   pointer.P(float64(2)),
+					},
+				},
+			},
 		),
 	)
 
@@ -158,6 +206,63 @@ var _ = Describe("Validating MigrationPolicy Admitter", func() {
 		Entry("allow unchanged update", true, pointer.P(uint64(900)), pointer.P(uint64(900)), true),
 		Entry("reject changing value on update", true, pointer.P(uint64(500)), pointer.P(uint64(900)), false),
 	)
+
+	DescribeTable("experimental.stallDetector feature gate validation when feature gate is disabled",
+		func(isUpdate bool, oldStallDetector, newStallDetector *v1.StallDetectorOptions, expectAllowed bool) {
+			disableFeatureGates()
+			newPolicy := kubecli.NewMinimalMigrationPolicy(policyName)
+			if newStallDetector != nil {
+				newPolicy.Spec.ExperimentalMigrationOptions = &v1.ExperimentalMigrationOptions{
+					StallDetector: newStallDetector,
+				}
+			}
+			if !isUpdate {
+				admitter.admitAndExpect(newPolicy, expectAllowed)
+				return
+			}
+			oldPolicy := kubecli.NewMinimalMigrationPolicy(policyName)
+			if oldStallDetector != nil {
+				oldPolicy.Spec.ExperimentalMigrationOptions = &v1.ExperimentalMigrationOptions{
+					StallDetector: oldStallDetector,
+				}
+			}
+			if expectAllowed {
+				newPolicy.Spec.AllowAutoConverge = pointer.P(true)
+			}
+			admitter.admitUpdateAndExpect(oldPolicy, newPolicy, expectAllowed)
+		},
+		Entry("reject on create", false, nil, &v1.StallDetectorOptions{
+			StallMargin: pointer.P(float64(0.04)),
+		}, false),
+		Entry("allow unchanged update", true,
+			&v1.StallDetectorOptions{StallMargin: pointer.P(float64(0.04))},
+			&v1.StallDetectorOptions{StallMargin: pointer.P(float64(0.04))},
+			true,
+		),
+		Entry("reject changing value on update", true,
+			&v1.StallDetectorOptions{StallMargin: pointer.P(float64(0.04))},
+			&v1.StallDetectorOptions{StallMargin: pointer.P(float64(0.08))},
+			false,
+		),
+	)
+
+	It("should allow parallelMigrationThreads", func() {
+		disableFeatureGates()
+		policy := kubecli.NewMinimalMigrationPolicy(policyName)
+		policy.Spec.ExperimentalMigrationOptions = &v1.ExperimentalMigrationOptions{
+			ParallelMigrationThreads: pointer.P(uint(4)),
+		}
+		admitter.admitAndExpect(policy, true)
+	})
+
+	It("policySpecToOptions maps every MigrationPolicySpec field", func() {
+		src := testutils.WithAllFieldsSet(reflect.TypeOf(migrationsv1.MigrationPolicySpec{})).(*migrationsv1.MigrationPolicySpec)
+		oracle := testutils.CopyByJSONTag(src, reflect.TypeOf(v1.VMIMConfigurationOptions{})).(*v1.VMIMConfigurationOptions)
+
+		got := policySpecToOptions(src)
+
+		Expect(*got).To(BeComparableTo(*oracle))
+	})
 })
 
 func createPolicyAdmissionReview(policy *migrationsv1.MigrationPolicy, namespace string) *admissionv1.AdmissionReview {

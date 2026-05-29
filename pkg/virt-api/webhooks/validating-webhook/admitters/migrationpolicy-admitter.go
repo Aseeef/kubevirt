@@ -25,16 +25,14 @@ import (
 	"fmt"
 
 	admissionv1 "k8s.io/api/admission/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfield "k8s.io/apimachinery/pkg/util/validation/field"
-
+	v1 "kubevirt.io/api/core/v1"
 	"kubevirt.io/api/migrations"
 	migrationsv1 "kubevirt.io/api/migrations/v1alpha1"
 
+	migrationutils "kubevirt.io/kubevirt/pkg/util/migrations"
 	webhookutils "kubevirt.io/kubevirt/pkg/util/webhooks"
 	virtconfig "kubevirt.io/kubevirt/pkg/virt-config"
-	"kubevirt.io/kubevirt/pkg/virt-config/featuregate"
 )
 
 // MigrationPolicyAdmitter validates MigrationPolicy resources
@@ -57,63 +55,43 @@ func (admitter *MigrationPolicyAdmitter) Admit(_ context.Context, ar *admissionv
 	}
 
 	policy := &migrationsv1.MigrationPolicy{}
-	err := json.Unmarshal(ar.Request.Object.Raw, policy)
-	if err != nil {
+	if err := json.Unmarshal(ar.Request.Object.Raw, policy); err != nil {
 		return webhookutils.ToAdmissionResponseError(err)
 	}
 
-	var causes []metav1.StatusCause
+	var oldOptions *v1.VMIMConfigurationOptions
+	if ar.Request.OldObject.Raw != nil {
+		oldPolicy := &migrationsv1.MigrationPolicy{}
+		if err := json.Unmarshal(ar.Request.OldObject.Raw, oldPolicy); err != nil {
+			return webhookutils.ToAdmissionResponseError(err)
+		}
+		oldOptions = policySpecToOptions(&oldPolicy.Spec)
+	}
 
+	newOptions := policySpecToOptions(&policy.Spec)
 	sourceField := k8sfield.NewPath("spec")
-
-	spec := policy.Spec
-	if spec.CompletionTimeoutPerGiB != nil && *spec.CompletionTimeoutPerGiB < 0 {
-		causes = append(causes, metav1.StatusCause{
-			Type:    metav1.CauseTypeFieldValueInvalid,
-			Message: "must not be negative",
-			Field:   sourceField.Child("completionTimeoutPerGiB").String(),
-		})
-	}
-	if spec.MaxDowntimeMs != nil {
-		var oldMaxDowntimeMs *uint64
-		if ar.Request.OldObject.Raw != nil {
-			oldPolicy := &migrationsv1.MigrationPolicy{}
-			if err := json.Unmarshal(ar.Request.OldObject.Raw, oldPolicy); err == nil {
-				oldMaxDowntimeMs = oldPolicy.Spec.MaxDowntimeMs
-			}
-		}
-		if !equality.Semantic.DeepEqual(oldMaxDowntimeMs, spec.MaxDowntimeMs) &&
-			!admitter.clusterConfig.MigrationStallDetectionEnabled() {
-			causes = append(causes, metav1.StatusCause{
-				Type:    metav1.CauseTypeFieldValueInvalid,
-				Message: fmt.Sprintf("maxDowntimeMs cannot be set without enabling the %s feature gate", featuregate.MigrationStallDetection),
-				Field:   sourceField.Child("maxDowntimeMs").String(),
-			})
-		}
-	}
-
-	if spec.BandwidthPerMigration != nil {
-		quantity, ok := spec.BandwidthPerMigration.AsInt64()
-		if !ok {
-			dec := spec.BandwidthPerMigration.AsDec()
-			quantity = int64(dec.Sign())
-		}
-
-		if quantity < 0 {
-			causes = append(causes, metav1.StatusCause{
-				Type:    metav1.CauseTypeFieldValueInvalid,
-				Message: "must not be negative",
-				Field:   sourceField.Child("bandwidthPerMigration").String(),
-			})
-		}
-	}
+	causes := migrationutils.ValidateMigrationPolicyOptions(
+		sourceField,
+		oldOptions,
+		newOptions,
+		admitter.clusterConfig.GetConfig().DeveloperConfiguration,
+	)
 
 	if len(causes) > 0 {
 		return webhookutils.ToAdmissionResponse(causes)
 	}
 
-	reviewResponse := admissionv1.AdmissionResponse{
-		Allowed: true,
+	return &admissionv1.AdmissionResponse{Allowed: true}
+}
+
+func policySpecToOptions(spec *migrationsv1.MigrationPolicySpec) *v1.VMIMConfigurationOptions {
+	return &v1.VMIMConfigurationOptions{
+		AllowAutoConverge:            spec.AllowAutoConverge,
+		BandwidthPerMigration:        spec.BandwidthPerMigration,
+		CompletionTimeoutPerGiB:      spec.CompletionTimeoutPerGiB,
+		MaxDowntimeMs:                spec.MaxDowntimeMs,
+		AllowPostCopy:                spec.AllowPostCopy,
+		AllowWorkloadDisruption:      spec.AllowWorkloadDisruption,
+		ExperimentalMigrationOptions: spec.ExperimentalMigrationOptions,
 	}
-	return &reviewResponse
 }
