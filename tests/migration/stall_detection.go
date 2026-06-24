@@ -121,7 +121,7 @@ func getVirtLauncherSourceLogs(virtClient kubecli.KubevirtClient, vmi *v1.Virtua
 	return string(logsRaw)
 }
 
-var _ = Describe(SIG("Migration Stall Detection", Serial, decorators.RequiresTwoSchedulableNodes, func() {
+var _ = Describe(SIGStall("Migration Stall Detection", Serial, decorators.RequiresTwoSchedulableNodes, func() {
 	var virtClient kubecli.KubevirtClient
 	var migrationPolicy *v1alpha1.MigrationPolicy
 
