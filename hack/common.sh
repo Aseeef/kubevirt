@@ -82,6 +82,21 @@ else
     KUBEVIRT_GO_BUILD_TAGS="selinux,${KUBEVIRT_GO_BUILD_TAGS}"
 fi
 
+# Opt-in e2e coverage: instrument cmd/pkg/client-go binaries and compile
+# SIGUSR1/SIGUSR2 handlers (pkg/e2ecoverage, coverage_e2e tag).
+# rules_go uses atomic covermode, which runtime/coverage.ClearCounters requires.
+e2e_coverage_bazel_flags=()
+if [ "${KUBEVIRT_E2E_COVERAGE}" = "true" ]; then
+    echo "[INFO] KUBEVIRT_E2E_COVERAGE=true: instrumenting binaries for e2e coverage" >&2
+    KUBEVIRT_GO_BUILD_TAGS="${KUBEVIRT_GO_BUILD_TAGS},coverage_e2e"
+    e2e_coverage_bazel_flags=(
+        --collect_code_coverage
+        "--instrumentation_filter=//cmd/...,//pkg/...,//staging/src/kubevirt.io/client-go/..."
+        --@io_bazel_rules_go//go/config:cover_format=go_cover
+        --@io_bazel_rules_go//go/config:tags=coverage_e2e
+    )
+fi
+
 # Populate an environment variable with the version info needed.
 # It should be used for everything which needs a version when building (not generating)
 # IMPORTANT:
@@ -100,7 +115,11 @@ function kubevirt_version() {
 KUBEVIRT_VERSION="$(kubevirt_version)"
 
 function go_build() {
-    GOPROXY=off go build "$@"
+    local extra=()
+    if [ "${KUBEVIRT_E2E_COVERAGE}" = "true" ]; then
+        extra=(-cover -covermode=atomic)
+    fi
+    GOPROXY=off go build "${extra[@]}" "$@"
 }
 
 # Use this environment variable to set a local path to a custom CA certificate for

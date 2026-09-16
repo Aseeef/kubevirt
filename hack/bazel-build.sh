@@ -42,6 +42,7 @@ mkdir -p ${CMD_OUT_DIR}/cluster-profiler
 # Build all binaries for amd64
 bazel build \
     --config=${ARCHITECTURE} ${BAZEL_CS_CONFIG} \
+    "${e2e_coverage_bazel_flags[@]}" \
     //tools/csv-generator/... \
     //tools/perfscale-audit/... \
     //tools/perfscale-load-generator/... \

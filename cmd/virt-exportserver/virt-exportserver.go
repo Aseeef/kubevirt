@@ -28,6 +28,7 @@ import (
 
 	"kubevirt.io/client-go/log"
 
+	"kubevirt.io/kubevirt/pkg/e2ecoverage"
 	"kubevirt.io/kubevirt/pkg/service"
 
 	"kubevirt.io/kubevirt/pkg/storage/export/export"
@@ -41,6 +42,7 @@ const (
 func main() {
 	log.InitializeLogging("virt-exportserver-" + os.Getenv("POD_NAME"))
 	log.Log.Info("Starting export server")
+	e2ecoverage.Start()
 
 	certFile, keyFile := getCert()
 	config := exportServer.ExportServerConfig{

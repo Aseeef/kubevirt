@@ -13,18 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright 2017 Red Hat, Inc.
+ * Copyright The KubeVirt Authors.
  *
  */
 
-package main
+package e2ecoverage
 
 import (
-	"kubevirt.io/kubevirt/pkg/e2ecoverage"
-	"kubevirt.io/kubevirt/pkg/virt-controller/watch"
+	"testing"
+
+	"kubevirt.io/client-go/testutils"
 )
 
-func main() {
-	e2ecoverage.Start()
-	watch.Execute()
+func TestE2ECoverage(t *testing.T) {
+	testutils.KubeVirtTestSuiteSetup(t)
 }

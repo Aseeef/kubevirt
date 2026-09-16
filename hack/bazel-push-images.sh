@@ -85,6 +85,7 @@ for tag in ${docker_tag} ${docker_tag_alt}; do
 
         bazel run \
             --config=${ARCHITECTURE} ${BAZEL_CS_CONFIG} \
+            "${e2e_coverage_bazel_flags[@]}" \
             //:push-${target} -- --registry ${docker_prefix} --repository ${image_prefix}${target} --tag ${tag}
 
     done
@@ -96,6 +97,7 @@ if [[ $image_prefix_alt ]]; then
 
         bazel run \
             --config=${ARCHITECTURE} ${BAZEL_CS_CONFIG} \
+            "${e2e_coverage_bazel_flags[@]}" \
             //:push-${target} -- --registry ${docker_prefix} --repository ${image_prefix_alt}${target} --tag ${docker_tag}
 
     done

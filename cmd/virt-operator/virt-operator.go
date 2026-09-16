@@ -20,9 +20,11 @@
 package main
 
 import (
+	"kubevirt.io/kubevirt/pkg/e2ecoverage"
 	virt_operator "kubevirt.io/kubevirt/pkg/virt-operator"
 )
 
 func main() {
+	e2ecoverage.Start()
 	virt_operator.Execute()
 }

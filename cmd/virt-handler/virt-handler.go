@@ -37,6 +37,7 @@ import (
 	"libvirt.org/go/libvirtxml"
 
 	"kubevirt.io/kubevirt/pkg/checkpoint"
+	"kubevirt.io/kubevirt/pkg/e2ecoverage"
 	netresources "kubevirt.io/kubevirt/pkg/network/resources"
 	"kubevirt.io/kubevirt/pkg/virt-handler/ksm"
 
@@ -865,5 +866,6 @@ func main() {
 	app := &virtHandlerApp{}
 	service.Setup(app)
 	log.InitializeLogging("virt-handler")
+	e2ecoverage.Start()
 	app.Run()
 }

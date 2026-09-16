@@ -46,6 +46,7 @@ import (
 
 	"kubevirt.io/kubevirt/pkg/certificates/bootstrap"
 	"kubevirt.io/kubevirt/pkg/controller"
+	"kubevirt.io/kubevirt/pkg/e2ecoverage"
 	"kubevirt.io/kubevirt/pkg/service"
 )
 
@@ -284,6 +285,7 @@ func (app *exportProxyApp) prepareCertManager() {
 func main() {
 	log.InitializeLogging("virt-exportproxy")
 	log.Log.Info("Starting export proxy")
+	e2ecoverage.Start()
 
 	app := NewExportProxyApp()
 	service.Setup(app)

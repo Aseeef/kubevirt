@@ -1,3 +1,5 @@
+//go:build !coverage_e2e
+
 /*
  * This file is part of the KubeVirt project
  *
@@ -13,18 +15,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright 2017 Red Hat, Inc.
+ * Copyright The KubeVirt Authors.
  *
  */
 
-package main
+package e2ecoverage
 
-import (
-	"kubevirt.io/kubevirt/pkg/e2ecoverage"
-	"kubevirt.io/kubevirt/pkg/virt-controller/watch"
-)
+import "os"
 
-func main() {
-	e2ecoverage.Start()
-	watch.Execute()
+// Start is a no-op in production builds. Signal handlers are compiled in
+// only when binaries are built with the coverage_e2e tag.
+func Start() {
+}
+
+// ForwardSignals is a no-op in production builds.
+func ForwardSignals(_ *os.Process) {
 }

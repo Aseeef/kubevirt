@@ -55,6 +55,7 @@ import (
 
 	"kubevirt.io/kubevirt/pkg/certificates/bootstrap"
 	"kubevirt.io/kubevirt/pkg/controller"
+	"kubevirt.io/kubevirt/pkg/e2ecoverage"
 	"kubevirt.io/kubevirt/pkg/synchronization-controller"
 	"kubevirt.io/kubevirt/pkg/util/ratelimiter"
 	virtconfig "kubevirt.io/kubevirt/pkg/virt-config"
@@ -415,6 +416,7 @@ func (app *synchronizationControllerApp) AddFlags() {
 
 func main() {
 	app := &synchronizationControllerApp{}
+	e2ecoverage.Start()
 	service.Setup(app)
 	app.Run()
 	log.Log.Info("successfully shutdown")

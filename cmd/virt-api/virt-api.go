@@ -22,12 +22,14 @@ package main
 import (
 	klog "kubevirt.io/client-go/log"
 
+	"kubevirt.io/kubevirt/pkg/e2ecoverage"
 	"kubevirt.io/kubevirt/pkg/service"
 	virt_api "kubevirt.io/kubevirt/pkg/virt-api"
 )
 
 func main() {
 	klog.InitializeLogging("virt-api")
+	e2ecoverage.Start()
 
 	app := virt_api.NewVirtApi()
 	service.Setup(app)

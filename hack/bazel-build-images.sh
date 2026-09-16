@@ -19,6 +19,14 @@
 
 set -e
 
+for arg in "$@"; do
+    case "${arg}" in
+    --build-cover)
+        export KUBEVIRT_E2E_COVERAGE=true
+        ;;
+    esac
+done
+
 source hack/common.sh
 source hack/bootstrap.sh
 source hack/config.sh
@@ -79,6 +87,7 @@ esac
 
 bazel build \
     --config=${ARCHITECTURE} ${BAZEL_CS_CONFIG} \
+    "${e2e_coverage_bazel_flags[@]}" \
     --define container_prefix= \
     --define image_prefix= \
     --define container_tag= \

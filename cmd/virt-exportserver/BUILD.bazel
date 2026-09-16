@@ -11,6 +11,7 @@ go_library(
     importpath = "kubevirt.io/kubevirt/cmd/virt-exportserver",
     visibility = ["//visibility:private"],
     deps = [
+        "//pkg/e2ecoverage:go_default_library",
         "//pkg/service:go_default_library",
         "//pkg/storage/export/export:go_default_library",
         "//pkg/storage/export/virt-exportserver:go_default_library",

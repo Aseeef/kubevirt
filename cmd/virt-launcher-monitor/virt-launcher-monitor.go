@@ -37,6 +37,8 @@ import (
 
 	"golang.org/x/sys/unix"
 	"kubevirt.io/client-go/log"
+
+	"kubevirt.io/kubevirt/pkg/e2ecoverage"
 )
 
 const (
@@ -66,6 +68,7 @@ func main() {
 	pflag.Parse()
 
 	log.InitializeLogging("virt-launcher-monitor")
+	e2ecoverage.Start()
 
 	// check if virt-launcher verbosity should be changed
 	if verbosityStr, ok := os.LookupEnv("VIRT_LAUNCHER_LOG_VERBOSITY"); ok {
@@ -110,6 +113,8 @@ func RunAndMonitor(containerDiskDir, uid string) (int, error) {
 		log.Log.Reason(err).Error("failed to run virt-launcher")
 		return 1, err
 	}
+
+	e2ecoverage.ForwardSignals(cmd.Process)
 
 	exitStatus := make(chan int, 10)
 	sigs := make(chan os.Signal, 10)
